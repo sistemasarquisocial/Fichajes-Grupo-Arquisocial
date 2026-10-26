@@ -36,6 +36,32 @@ export interface UsuarioGestion {
   ultimoAccesoUtc: string | null; creadoUtc: string;
 }
 
+export type EstadoUbicacion = "OK" | "DENEGADA" | "NO_DISPONIBLE" | "TIMEOUT" | "NO_SOPORTADA";
+export interface ResultadoUbicacion {
+  estado: EstadoUbicacion;
+  coords?: { lat: number; lon: number; precision: number };
+}
+
+/** Pide la ubicación SOLO en el momento de fichar. Nunca lanza error: si falla, devuelve el motivo. */
+export function obtenerUbicacion(timeoutMs = 10000): Promise<ResultadoUbicacion> {
+  if (!("geolocation" in navigator)) return Promise.resolve({ estado: "NO_SOPORTADA" });
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ estado: "OK", coords: { lat: p.coords.latitude, lon: p.coords.longitude, precision: Math.round(p.coords.accuracy) } }),
+      (e) => resolve({ estado: e.code === e.PERMISSION_DENIED ? "DENEGADA" : e.code === e.TIMEOUT ? "TIMEOUT" : "NO_DISPONIBLE" }),
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
+    );
+  });
+}
+
+export const TEXTO_UBICACION: Record<EstadoUbicacion, string> = {
+  OK: "con ubicación",
+  DENEGADA: "sin ubicación (permiso denegado)",
+  NO_DISPONIBLE: "sin ubicación (no disponible)",
+  TIMEOUT: "sin ubicación (tiempo agotado)",
+  NO_SOPORTADA: "sin ubicación (navegador no compatible)",
+};
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -58,13 +84,19 @@ export const api = {
   setup: (d: { setupKey: string; email: string; nombre: string; apellidos: string; empresaId: number; password: string }) => llamar("POST", "setup", d),
   empresas: () => llamar<Empresa[]>("GET", "empresas"),
 
-  login: (email: string, password: string) => llamar<{ usuario: Usuario }>("POST", "auth/login", { email, password }),
+  login: (email: string, password: string, recordar = false) =>
+    llamar<{ usuario: Usuario }>("POST", "auth/login", { email, password, recordar }),
   logout: () => llamar("POST", "auth/logout"),
   me: () => llamar<{ usuario: Usuario }>("GET", "auth/me"),
   cambiarPassword: (actual: string, nueva: string) => llamar("POST", "auth/cambiar-password", { actual, nueva }),
 
   estado: () => llamar<EstadoFichaje>("GET", "fichajes/estado"),
-  fichar: (tipo: TipoFichaje) => llamar<{ tipo: TipoFichaje; fechaHoraUtc: string }>("POST", "fichajes", { tipo }),
+  fichar: (tipo: TipoFichaje, ubi: ResultadoUbicacion) =>
+    llamar<{ tipo: TipoFichaje; fechaHoraUtc: string; ubicacion: { estado: EstadoUbicacion; precision: number | null } }>(
+      "POST",
+      "fichajes",
+      ubi.coords ? { tipo, ubicacion: ubi.coords } : { tipo, ubicacionEstado: ubi.estado }
+    ),
   historial: (desde: string, hasta: string) =>
     llamar<{ desde: string; hasta: string; dias: ResumenDia[] }>("GET", `fichajes/historial?desde=${desde}&hasta=${hasta}`),
 

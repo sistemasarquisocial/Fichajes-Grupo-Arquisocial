@@ -106,7 +106,8 @@ app.http("login", {
     if (!b || !validarEmail(b.email) || typeof b.password !== "string" || !b.password) {
       return error(400, "Introduce email y contraseña");
     }
-    const r = await login(b.email, b.password);
+    const recordar = b.recordar === true;
+    const r = await login(b.email, b.password, recordar);
     if (!r.ok) {
       await auditar(null, "LOGIN_FALLIDO", "Usuario", null, `${String(b.email).slice(0, 254)} (${r.motivo})`, ipCliente(req));
       return r.motivo === "bloqueado"
@@ -114,7 +115,7 @@ app.http("login", {
         : error(401, "Email o contraseña incorrectos");
     }
     await auditar(r.usuario.usuarioId, "LOGIN", "Usuario", r.usuario.usuarioId, null, ipCliente(req));
-    return json(200, { usuario: r.usuario }, { cookies: [cookieSesion(r.token)] });
+    return json(200, { usuario: r.usuario }, { cookies: [cookieSesion(r.token, recordar)] });
   }),
 });
 
@@ -164,7 +165,7 @@ app.http("cambiarPassword", {
         );
       await auditar(u.usuarioId, "CAMBIO_PASSWORD", "Usuario", u.usuarioId, null, ipCliente(req));
       // Invalida otras sesiones y emite una nueva para esta
-      return json(200, { ok: true }, { cookies: [cookieSesion(await crearToken(u.usuarioId, nuevaVersion))] });
+      return json(200, { ok: true }, { cookies: [cookieSesion(await crearToken(u.usuarioId, nuevaVersion, u.recordar), u.recordar)] });
     },
     { permitirCambioPendiente: true }
   ),

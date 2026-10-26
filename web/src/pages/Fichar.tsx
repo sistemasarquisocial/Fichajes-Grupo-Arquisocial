@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, EstadoFichaje, TipoFichaje, hora, duracion, ETIQUETA_TIPO } from "../api";
+import { api, ApiError, EstadoFichaje, TipoFichaje, hora, duracion, ETIQUETA_TIPO, obtenerUbicacion, TEXTO_UBICACION } from "../api";
 import { useSesion } from "../sesion";
 
 const TEXTO_ESTADO = { FUERA: "Fuera de jornada", TRABAJANDO: "Trabajando", EN_PAUSA: "En pausa" } as const;
@@ -16,6 +16,7 @@ export default function Fichar() {
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [paso, setPaso] = useState("");
   const [ahora, setAhora] = useState(new Date());
 
   const cargar = useCallback(async () => {
@@ -38,15 +39,21 @@ export default function Fichar() {
     if (tipo === "SALIDA" && !confirm("¿Confirmas la salida y fin de tu jornada?")) return;
     setEnviando(true);
     setError("");
+    setAviso("");
     try {
-      const r = await api.fichar(tipo);
-      setAviso(`${ETIQUETA_TIPO[r.tipo]} registrada a las ${hora(r.fechaHoraUtc)}`);
+      setPaso("Obteniendo ubicación…");
+      const ubi = await obtenerUbicacion();
+      setPaso("Registrando…");
+      const r = await api.fichar(tipo, ubi);
+      const precision = r.ubicacion.estado === "OK" && r.ubicacion.precision != null ? ` (±${r.ubicacion.precision} m)` : "";
+      setAviso(`${ETIQUETA_TIPO[r.tipo]} registrada a las ${hora(r.fechaHoraUtc)} · ${TEXTO_UBICACION[r.ubicacion.estado]}${precision}`);
       await cargar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo registrar el fichaje");
       await cargar();
     } finally {
       setEnviando(false);
+      setPaso("");
     }
   }
 
@@ -68,6 +75,8 @@ export default function Fichar() {
             </button>
           ))}
         </div>
+        {paso && <p className="nota" role="status">{paso}</p>}
+        <p className="nota nota-ubicacion">Al fichar se registra tu ubicación solo en ese momento. Si no das permiso, el fichaje se guarda igualmente sin ubicación.</p>
         {aviso && <p className="exito" role="status">{aviso}</p>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>

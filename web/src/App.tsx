@@ -28,19 +28,21 @@ export default function App() {
   return (
     <div className="app">
       <header className="cabecera">
-        <div className="marca">
-          <img src="/favicon.svg" alt="" width={28} height={28} />
-          <span>Fichajes</span>
-        </div>
-        <nav className="nav">
-          <NavLink to="/" end>Fichar</NavLink>
-          <NavLink to="/historial">Mi historial</NavLink>
-          {esGestor && <NavLink to="/gestion/usuarios">Usuarios</NavLink>}
-          <NavLink to="/cuenta">Mi cuenta</NavLink>
-        </nav>
-        <div className="usuario">
-          <span className="usuario-nombre">{usuario.nombre}</span>
-          <button className="btn-link" onClick={salir}>Salir</button>
+        <div className="cabecera-int">
+          <NavLink to="/" className="marca" aria-label="Fichajes · Grupo Arquisocial">
+            <img src="/mariposa.svg" alt="" width={30} height={28} />
+            <span className="marca-texto">Fichajes</span>
+          </NavLink>
+          <nav className="nav" aria-label="Principal">
+            <NavLink to="/" end>Fichar</NavLink>
+            <NavLink to="/historial">Mi historial</NavLink>
+            {esGestor && <NavLink to="/gestion/usuarios">Usuarios</NavLink>}
+            <NavLink to="/cuenta">Mi cuenta</NavLink>
+          </nav>
+          <div className="usuario">
+            <span className="usuario-nombre">{usuario.nombre}</span>
+            <button className="btn-salir" onClick={salir}>Salir</button>
+          </div>
         </div>
       </header>
       <main className="contenido">

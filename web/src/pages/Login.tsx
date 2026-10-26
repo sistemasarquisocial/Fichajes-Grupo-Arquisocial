@@ -8,6 +8,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [verPassword, setVerPassword] = useState(false);
+  const [recordar, setRecordar] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [necesitaSetup, setNecesitaSetup] = useState(false);
@@ -21,7 +22,7 @@ export default function Login() {
     setError("");
     setEnviando(true);
     try {
-      const r = await api.login(email, password);
+      const r = await api.login(email, password, recordar);
       setUsuario(r.usuario);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo conectar. Inténtalo de nuevo.");
@@ -76,6 +77,12 @@ export default function Login() {
                 )}
               </button>
             </div>
+          </label>
+
+          <label className="acceso-recordar">
+            <input type="checkbox" checked={recordar} onChange={(e) => setRecordar(e.target.checked)} />
+            <span className="acceso-check" aria-hidden="true" />
+            <span>Recordarme en este dispositivo</span>
           </label>
 
           {error && <p className="acceso-error" role="alert">{error}</p>}

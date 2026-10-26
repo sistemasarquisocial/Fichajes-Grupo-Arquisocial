@@ -1,0 +1,17 @@
+{
+  "name": "Fichajes · Grupo Arquisocial",
+  "short_name": "Fichajes",
+  "description": "Registro de jornada de Grupo Arquisocial",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#899F75",
+  "theme_color": "#899F75",
+  "icons": [
+    { "src": "/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
