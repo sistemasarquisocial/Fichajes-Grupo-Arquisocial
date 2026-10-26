@@ -6,6 +6,23 @@ import { estadoTras, accionesPermitidas, resumirPorDia, fechaLocal, TipoFichaje 
 
 const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 const TIPOS: TipoFichaje[] = ["ENTRADA", "SALIDA", "PAUSA_INICIO", "PAUSA_FIN"];
+const ESTADOS_SIN_UBICACION = ["DENEGADA", "NO_DISPONIBLE", "TIMEOUT", "NO_SOPORTADA"] as const;
+
+interface Ubicacion { estado: string; lat: number | null; lon: number | null; precision: number | null }
+
+/** Valida la ubicación enviada por el navegador. Nunca bloquea el fichaje: si no es válida se guarda como NO_DISPONIBLE. */
+function leerUbicacion(b: any): Ubicacion {
+  const u = b?.ubicacion;
+  if (u && typeof u === "object") {
+    const lat = Number(u.lat), lon = Number(u.lon), precision = Number(u.precision);
+    if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      const p = Number.isFinite(precision) && precision >= 0 ? Math.min(Math.round(precision), 1000000) : null;
+      return { estado: "OK", lat: Math.round(lat * 1e6) / 1e6, lon: Math.round(lon * 1e6) / 1e6, precision: p };
+    }
+  }
+  const estado = ESTADOS_SIN_UBICACION.includes(b?.ubicacionEstado) ? b.ubicacionEstado : "NO_DISPONIBLE";
+  return { estado, lat: null, lon: null, precision: null };
+}
 
 async function ultimoFichaje(req: sql.Request, usuarioId: number) {
   const r = await req
@@ -58,6 +75,7 @@ app.http("fichar", {
     const b = await leerJson(req);
     const tipo = b?.tipo as TipoFichaje;
     if (!TIPOS.includes(tipo)) return error(400, "Tipo de fichaje no válido");
+    const ubi = leerUbicacion(b);
 
     const pool = await getPool();
     const tx = new sql.Transaction(pool);
@@ -76,13 +94,22 @@ app.http("fichar", {
         .input("tipo", sql.VarChar(20), tipo)
         .input("ip", sql.VarChar(45), ipCliente(req))
         .input("ua", sql.NVarChar(400), (req.headers.get("user-agent") ?? "").slice(0, 400))
+        .input("lat", sql.Decimal(9, 6), ubi.lat)
+        .input("lon", sql.Decimal(9, 6), ubi.lon)
+        .input("prec", sql.Int, ubi.precision)
+        .input("ubi", sql.VarChar(20), ubi.estado)
         .query(
-          `INSERT INTO fich.Fichajes (UsuarioId, Tipo, IpOrigen, UserAgent)
+          `INSERT INTO fich.Fichajes (UsuarioId, Tipo, IpOrigen, UserAgent, Latitud, Longitud, PrecisionM, UbicacionEstado)
            OUTPUT INSERTED.FichajeId, INSERTED.FechaHoraUtc
-           VALUES (@uid, @tipo, @ip, @ua)`
+           VALUES (@uid, @tipo, @ip, @ua, @lat, @lon, @prec, @ubi)`
         );
       await tx.commit();
-      return json(201, { fichajeId: r.recordset[0].FichajeId, tipo, fechaHoraUtc: r.recordset[0].FechaHoraUtc });
+      return json(201, {
+        fichajeId: r.recordset[0].FichajeId,
+        tipo,
+        fechaHoraUtc: r.recordset[0].FechaHoraUtc,
+        ubicacion: { estado: ubi.estado, precision: ubi.precision },
+      });
     } catch (e) {
       await tx.rollback().catch(() => {});
       throw e;
