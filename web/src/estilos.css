@@ -174,7 +174,7 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .acceso-campo input::placeholder { color: #8a8a7c; font-weight: 400; }
-.acceso-campo input:focus { outline: none; border-color: var(--amarillo); box-shadow: 0 0 0 4px rgba(245, 216, 146, 0.35); }
+.acceso-campo input:focus { outline: none; border-color: #fbfbfb; box-shadow: 0 0 0 4px rgba(251, 251, 251, 0.35); }
 .acceso-password { position: relative; }
 .acceso-password input { padding-right: 54px; }
 .acceso-ojo {
