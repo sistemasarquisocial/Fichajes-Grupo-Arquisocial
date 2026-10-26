@@ -29,7 +29,15 @@ export interface EstadoFichaje {
 
 export interface Empresa { id: number; nombre: string }
 export interface EmpresaGestion { id: number; nombre: string; activa: boolean; creadoUtc: string; centros: number; usuariosActivos: number }
-export interface Centro { id: number; nombre: string; empresaId: number; empresa: string; activo: boolean }
+export interface Centro {
+  id: number; codigoServicio: string | null; nombre: string; empresaId: number; empresa: string;
+  direccion: string | null; codigoPostal: string | null; ciudad: string | null; telefono: string | null;
+  activo: boolean; creadoUtc: string; usuariosActivos: number;
+}
+export interface DatosCentro {
+  empresaId: number; codigoServicio: string; nombre: string;
+  direccion: string; codigoPostal: string; ciudad: string; telefono: string;
+}
 export interface UsuarioGestion {
   id: number; email: string; nombre: string; apellidos: string;
   empresaId: number; empresa: string; centroId: number | null; centro: string | null;
@@ -109,7 +117,9 @@ export const api = {
   empresasGestion: () => llamar<EmpresaGestion[]>("GET", "gestion/empresas"),
   crearEmpresa: (nombre: string) => llamar<{ id: number; nombre: string }>("POST", "gestion/empresas", { nombre }),
   editarEmpresa: (id: number, d: { nombre?: string; activa?: boolean }) => llamar("PUT", `gestion/empresas/${id}`, d),
-  crearCentro: (nombre: string, empresaId: number) => llamar<{ id: number }>("POST", "gestion/centros", { nombre, empresaId }),
+  crearCentro: (d: DatosCentro) => llamar<{ id: number }>("POST", "gestion/centros", d),
+  editarCentro: (id: number, d: DatosCentro) => llamar("PUT", `gestion/centros/${id}`, d),
+  estadoCentro: (id: number, activo: boolean) => llamar("PUT", `gestion/centros/${id}/estado`, { activo }),
 };
 
 /* ---------- utilidades de formato ---------- */

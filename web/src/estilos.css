@@ -289,7 +289,16 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
   .admin-layout { grid-template-columns: 1fr; }
   .admin-menu { position: static; flex-direction: row; overflow-x: auto; }
   .admin-menu a { flex: 1 1 0; min-width: 0; align-items: center; padding: 10px; border-left: none; border-bottom: 3px solid transparent; }
-  .admin-menu a strong { font-size: 0.85rem; line-height: 1.2; }
+  .admin-menu a strong { font-size: 0.8rem; line-height: 1.2; }
+  .admin-menu a { gap: 8px; }
   .admin-menu a.active { border-bottom-color: var(--verde); }
   .admin-menu a small { display: none; }
 }
+
+/* Centros */
+.modal-ancho { max-width: 580px; }
+.codigo { font-variant-numeric: tabular-nums; font-weight: 700; background: var(--verde-claro); color: var(--verde-oscuro); padding: 2px 8px; border-radius: 6px; }
+.tabla-buscador { padding: 12px 14px 4px; }
+.tabla-buscador .buscador { margin: 0; }
+.tabla td .nota { margin: 2px 0 0; font-size: 0.8rem; }
+.nowrap { white-space: nowrap; }
