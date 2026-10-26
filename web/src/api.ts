@@ -28,6 +28,7 @@ export interface EstadoFichaje {
 }
 
 export interface Empresa { id: number; nombre: string }
+export interface EmpresaGestion { id: number; nombre: string; activa: boolean; creadoUtc: string; centros: number; usuariosActivos: number }
 export interface Centro { id: number; nombre: string; empresaId: number; empresa: string; activo: boolean }
 export interface UsuarioGestion {
   id: number; email: string; nombre: string; apellidos: string;
@@ -105,6 +106,9 @@ export const api = {
   editarUsuario: (id: number, d: any) => llamar("PUT", `gestion/usuarios/${id}`, d),
   resetPassword: (id: number, passwordTemporal: string) => llamar("POST", `gestion/usuarios/${id}/reset-password`, { passwordTemporal }),
   centros: () => llamar<Centro[]>("GET", "gestion/centros"),
+  empresasGestion: () => llamar<EmpresaGestion[]>("GET", "gestion/empresas"),
+  crearEmpresa: (nombre: string) => llamar<{ id: number; nombre: string }>("POST", "gestion/empresas", { nombre }),
+  editarEmpresa: (id: number, d: { nombre?: string; activa?: boolean }) => llamar("PUT", `gestion/empresas/${id}`, d),
   crearCentro: (nombre: string, empresaId: number) => llamar<{ id: number }>("POST", "gestion/centros", { nombre, empresaId }),
 };
 

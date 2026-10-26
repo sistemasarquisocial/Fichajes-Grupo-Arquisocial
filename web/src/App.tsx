@@ -6,6 +6,7 @@ import CambiarPassword from "./pages/CambiarPassword";
 import Fichar from "./pages/Fichar";
 import Historial from "./pages/Historial";
 import GestionUsuarios from "./pages/GestionUsuarios";
+import GestionEmpresas from "./pages/GestionEmpresas";
 
 export default function App() {
   const { usuario, cargando, salir } = useSesion();
@@ -24,6 +25,7 @@ export default function App() {
   if (usuario.debeCambiarPassword) return <CambiarPassword obligatorio />;
 
   const esGestor = usuario.rol === "ADMIN" || usuario.rol === "RRHH";
+  const esAdmin = usuario.rol === "ADMIN";
 
   return (
     <div className="app">
@@ -37,6 +39,7 @@ export default function App() {
             <NavLink to="/" end>Fichar</NavLink>
             <NavLink to="/historial">Mi historial</NavLink>
             {esGestor && <NavLink to="/gestion/usuarios">Usuarios</NavLink>}
+            {esAdmin && <NavLink to="/gestion/empresas">Empresas</NavLink>}
             <NavLink to="/cuenta">Mi cuenta</NavLink>
           </nav>
           <div className="usuario">
@@ -51,6 +54,7 @@ export default function App() {
           <Route path="/historial" element={<Historial />} />
           <Route path="/cuenta" element={<CambiarPassword />} />
           {esGestor && <Route path="/gestion/usuarios" element={<GestionUsuarios />} />}
+          {esAdmin && <Route path="/gestion/empresas" element={<GestionEmpresas />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

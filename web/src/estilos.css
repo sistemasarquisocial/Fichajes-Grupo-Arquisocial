@@ -230,3 +230,36 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
   .acceso-logo { max-width: 260px; }
   .acceso-titulo { margin: 18px 0 28px; }
 }
+
+/* ===== Ventanas modales y asistentes ===== */
+.modal-fondo {
+  position: fixed; inset: 0; z-index: 50; background: rgba(42, 42, 42, 0.45);
+  display: grid; place-items: center; padding: 16px; animation: aparecer 0.15s ease-out;
+}
+.modal {
+  width: 100%; max-width: 480px; background: var(--tarjeta); border-radius: 16px; padding: 22px 24px 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2); max-height: calc(100vh - 32px); overflow: auto;
+}
+.modal-cabecera { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-cabecera h2 { margin: 0; }
+.modal-cerrar { border: none; background: none; font-size: 1.6rem; line-height: 1; color: var(--texto-suave); cursor: pointer; padding: 2px 8px; border-radius: 8px; }
+.modal-cerrar:hover { background: var(--verde-claro); }
+.modal-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.form-modal { display: flex; flex-direction: column; gap: 8px; }
+.pasos { list-style: none; display: flex; gap: 8px; padding: 0; margin: 0 0 18px; counter-reset: paso; }
+.pasos li { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 700; color: var(--texto-suave); padding-bottom: 10px; border-bottom: 3px solid var(--borde); }
+.pasos li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--borde); color: var(--texto-suave); font-size: 0.75rem; flex: none; }
+.pasos li.activo { color: var(--texto); border-color: var(--verde); }
+.pasos li.activo span { background: var(--verde); color: #fff; }
+.pasos li.hecho { border-color: var(--verde); }
+.pasos li.hecho span { background: var(--verde-claro); color: var(--verde-oscuro); }
+.resumen { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; padding: 14px 16px; background: #fafbf9; border: 1px solid var(--borde); border-radius: 10px; }
+.resumen dt { color: var(--texto-suave); font-size: 0.85rem; }
+.resumen dd { margin: 0; font-weight: 600; }
+.aviso { background: #fff9dc; border: 1px solid #f5d892; color: #6b5414; padding: 8px 12px; border-radius: 8px; margin: 4px 0; font-size: 0.9rem; }
+.chip-activa { background: var(--verde-claro); color: var(--verde-oscuro); }
+.chip-inactiva { background: #eceeed; color: var(--texto-suave); }
+.vacio { padding: 16px; }
+.titulo-acciones h1 { margin-bottom: 2px; }
+.titulo-acciones { margin-bottom: 14px; }
+@keyframes aparecer { from { opacity: 0; } to { opacity: 1; } }
