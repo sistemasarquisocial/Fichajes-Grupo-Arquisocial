@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import GestionUsuarios from "./GestionUsuarios";
 import GestionEmpresas from "./GestionEmpresas";
+import GestionCentros from "./GestionCentros";
 
 const IconoUsuarios = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -13,13 +14,20 @@ const IconoEmpresas = () => (
   </svg>
 );
 
-/** Panel de administración: agrupa la gestión de usuarios (ADMIN y RRHH) y de empresas (solo ADMIN). */
+const IconoCentros = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" />
+    <circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+  </svg>
+);
+
+/** Panel de administración: agrupa la gestión de usuarios (ADMIN y RRHH), centros y empresas (solo ADMIN). */
 export default function Admin({ esAdmin }: { esAdmin: boolean }) {
   return (
     <section className="admin">
       <div className="admin-titulo">
         <h1>Panel de administración</h1>
-        <p className="sub">Gestión de usuarios{esAdmin ? " y empresas" : ""} de Grupo Arquisocial.</p>
+        <p className="sub">Gestión de usuarios{esAdmin ? ", centros y empresas" : ""} de Grupo Arquisocial.</p>
       </div>
       <div className="admin-layout">
         <nav className="admin-menu" aria-label="Secciones de administración">
@@ -27,6 +35,12 @@ export default function Admin({ esAdmin }: { esAdmin: boolean }) {
             <IconoUsuarios />
             <span><strong>Gestión de usuarios</strong><small>Altas, roles, centros y contraseñas</small></span>
           </NavLink>
+          {esAdmin && (
+            <NavLink to="centros">
+              <IconoCentros />
+              <span><strong>Gestión de centros</strong><small>Código de servicio, dirección y teléfono</small></span>
+            </NavLink>
+          )}
           {esAdmin && (
             <NavLink to="empresas">
               <IconoEmpresas />
@@ -38,6 +52,7 @@ export default function Admin({ esAdmin }: { esAdmin: boolean }) {
           <Routes>
             <Route index element={<Navigate to="usuarios" replace />} />
             <Route path="usuarios" element={<GestionUsuarios />} />
+            {esAdmin && <Route path="centros" element={<GestionCentros />} />}
             {esAdmin && <Route path="empresas" element={<GestionEmpresas />} />}
             <Route path="*" element={<Navigate to="usuarios" replace />} />
           </Routes>

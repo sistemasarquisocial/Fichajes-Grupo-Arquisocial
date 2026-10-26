@@ -1,4 +1,5 @@
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import Modal from "../components/Modal";
 import { api, ApiError, EmpresaGestion } from "../api";
 import { useSesion } from "../sesion";
 
@@ -234,25 +235,5 @@ function EditarEmpresa({ empresa, existentes, onCerrar, onGuardada }: { empresa:
         </div>
       </form>
     </Modal>
-  );
-}
-
-/* ---------- Ventana modal ---------- */
-function Modal({ titulo, onCerrar, children }: { titulo: string; onCerrar: () => void; children: ReactNode }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onCerrar(); };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [onCerrar]);
-  return (
-    <div className="modal-fondo" onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={titulo}>
-        <div className="modal-cabecera">
-          <h2>{titulo}</h2>
-          <button className="modal-cerrar" onClick={onCerrar} aria-label="Cerrar">×</button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }
