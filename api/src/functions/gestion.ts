@@ -200,47 +200,4 @@ app.http("gestionUsuariosResetPassword", {
   ),
 });
 
-/* ---------- Centros ---------- */
-app.http("gestionCentrosListar", {
-  methods: ["GET"],
-  authLevel: "anonymous",
-  route: "gestion/centros",
-  handler: conSesion(
-    async () => {
-      const pool = await getPool();
-      const r = await pool.request().query(
-        `SELECT c.CentroId AS id, c.Nombre AS nombre, c.EmpresaId AS empresaId, e.Nombre AS empresa, c.Activo AS activo
-           FROM fich.Centros c JOIN fich.Empresas e ON e.EmpresaId = c.EmpresaId
-          ORDER BY e.Nombre, c.Nombre`
-      );
-      return json(200, r.recordset);
-    },
-    { roles: GESTORES }
-  ),
-});
-
-app.http("gestionCentrosCrear", {
-  methods: ["POST"],
-  authLevel: "anonymous",
-  route: "gestion/centros",
-  handler: conSesion(
-    async (req, _ctx, actor) => {
-      const b = await leerJson(req);
-      const nombre = String(b?.nombre ?? "").trim();
-      const empresaId = Number(b?.empresaId);
-      if (!nombre || !empresaId) return error(400, "Nombre y empresa son obligatorios");
-      const pool = await getPool();
-      const dup = await pool.request().input("n", sql.NVarChar(150), nombre).input("e", sql.Int, empresaId).query("SELECT 1 FROM fich.Centros WHERE Nombre = @n AND EmpresaId = @e");
-      if (dup.recordset.length) return error(409, "Ya existe ese centro en la empresa");
-      const r = await pool
-        .request()
-        .input("n", sql.NVarChar(150), nombre)
-        .input("e", sql.Int, empresaId)
-        .query("INSERT INTO fich.Centros (EmpresaId, Nombre) OUTPUT INSERTED.CentroId VALUES (@e, @n)");
-      const id = r.recordset[0].CentroId;
-      await auditar(actor.usuarioId, "CREAR_CENTRO", "Centro", id, `${nombre} empresa=${empresaId}`, ipCliente(req));
-      return json(201, { id });
-    },
-    { roles: GESTORES }
-  ),
-});
+/* Centros: ver functions/centros.ts */

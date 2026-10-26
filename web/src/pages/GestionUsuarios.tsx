@@ -16,7 +16,6 @@ export default function GestionUsuarios() {
   const [pwTemporal, setPwTemporal] = useState("");
   const [mensaje, setMensaje] = useState<{ tipo: "exito" | "error"; texto: string } | null>(null);
   const [credenciales, setCredenciales] = useState<{ email: string; password: string } | null>(null);
-  const [nuevoCentro, setNuevoCentro] = useState({ nombre: "", empresaId: "" });
 
   async function cargar() {
     const [u, e, c] = await Promise.all([api.usuarios(), api.empresas(), api.centros()]);
@@ -81,18 +80,6 @@ export default function GestionUsuarios() {
     }
   }
 
-  async function crearCentro(e: FormEvent) {
-    e.preventDefault();
-    try {
-      await api.crearCentro(nuevoCentro.nombre, Number(nuevoCentro.empresaId));
-      setNuevoCentro({ nombre: "", empresaId: "" });
-      setCentros(await api.centros());
-      setMensaje({ tipo: "exito", texto: "Centro creado." });
-    } catch (err) {
-      setMensaje({ tipo: "error", texto: err instanceof ApiError ? err.message : "Error" });
-    }
-  }
-
   const set = (k: keyof typeof form) => (e: any) =>
     setForm({ ...form, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value, ...(k === "empresaId" ? { centroId: "" } : {}) });
 
@@ -100,7 +87,7 @@ export default function GestionUsuarios() {
     <section>
       <div className="tarjeta">
         <div className="titulo-acciones">
-          <h2>Usuarios</h2>
+          <h2>Gestión de usuarios</h2>
           <button className="btn btn-primario" onClick={abrirNuevo}>+ Nuevo usuario</button>
         </div>
         <input className="buscador" placeholder="Buscar por nombre, email, empresa o centro…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
@@ -134,7 +121,7 @@ export default function GestionUsuarios() {
               Centro
               <select value={form.centroId} onChange={set("centroId")} disabled={!form.empresaId}>
                 <option value="">(Sin centro)</option>
-                {centrosEmpresa.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                {centrosEmpresa.map((c) => <option key={c.id} value={c.id}>{c.codigoServicio ? `${c.codigoServicio} · ` : ""}{c.nombre}</option>)}
               </select>
             </label>
             <label>
@@ -186,25 +173,6 @@ export default function GestionUsuarios() {
         )}
       </div>
 
-      <form className="tarjeta" onSubmit={crearCentro}>
-        <h3>Centros de trabajo</h3>
-        <div className="filtros">
-          <label>
-            Empresa
-            <select value={nuevoCentro.empresaId} onChange={(e) => setNuevoCentro({ ...nuevoCentro, empresaId: e.target.value })} required>
-              <option value="">Selecciona…</option>
-              {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-            </select>
-          </label>
-          <label>Nombre del centro<input value={nuevoCentro.nombre} onChange={(e) => setNuevoCentro({ ...nuevoCentro, nombre: e.target.value })} required /></label>
-          <button className="btn btn-secundario">Añadir centro</button>
-        </div>
-        {centros.length > 0 && (
-          <ul className="lista-simple">
-            {centros.map((c) => <li key={c.id}>{c.empresa} · {c.nombre}</li>)}
-          </ul>
-        )}
-      </form>
     </section>
   );
 }
