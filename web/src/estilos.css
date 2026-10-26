@@ -34,20 +34,33 @@ code { background: var(--verde-claro); padding: 2px 6px; border-radius: 6px; fon
 
 /* Layout */
 .app { min-height: 100vh; display: flex; flex-direction: column; }
-.cabecera {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 10px 20px; background: var(--tarjeta); border-bottom: 1px solid var(--borde);
-  position: sticky; top: 0; z-index: 10;
+/* Cabecera corporativa: verde, recta, como www.grupoarquisocial.es */
+.cabecera { background: var(--verde); position: sticky; top: 0; z-index: 10; }
+.cabecera-int {
+  max-width: 1100px; margin: 0 auto; min-height: 64px; padding: 0 20px;
+  display: flex; align-items: center; gap: 28px;
 }
-.marca { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.1rem; }
+.marca { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff9dc; }
+.marca img { display: block; height: 28px; width: auto; }
+.marca-texto { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .marca-grande { margin-bottom: 8px; }
 .marca-grande h1 { margin: 0; }
-.nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
-.nav a { padding: 8px 12px; border-radius: 8px; color: var(--texto-suave); text-decoration: none; font-weight: 500; }
-.nav a:hover { background: var(--verde-claro); }
-.nav a.active { background: var(--verde-claro); color: var(--verde-oscuro); }
-.usuario { display: flex; align-items: center; gap: 10px; }
-.usuario-nombre { color: var(--texto-suave); }
+.nav { display: flex; gap: 26px; margin-left: auto; align-items: center; }
+.nav a {
+  color: #fbfbfb; text-decoration: none; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 0; border-bottom: 2px solid transparent; transition: color 0.15s;
+}
+.nav a:hover { color: #f5d892; }
+.nav a.active { color: #f5d892; }
+.nav a:focus-visible, .marca:focus-visible, .btn-salir:focus-visible { outline: 2px solid #f5d892; outline-offset: 4px; }
+.usuario { display: flex; align-items: center; gap: 14px; padding-left: 26px; border-left: 1px solid rgba(255, 249, 220, 0.35); }
+.usuario-nombre { color: #fff9dc; font-size: 0.85rem; font-weight: 600; }
+.btn-salir {
+  font: inherit; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+  background: transparent; color: #fff9dc; border: 1.5px solid rgba(255, 249, 220, 0.7); border-radius: 999px; padding: 6px 14px;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-salir:hover { background: #fff9dc; color: var(--verde-oscuro); }
 .contenido { width: 100%; max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
 .centrado { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .centrado-bloque { display: grid; place-items: center; padding: 40px 0; }
@@ -66,6 +79,7 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
 .filtros { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
 .sub { color: var(--texto-suave); margin: 0; }
 .nota { color: var(--texto-suave); font-size: 0.88rem; margin: 4px 0; }
+.nota-ubicacion { font-size: 0.8rem; margin-top: 10px; }
 .error { color: var(--rojo); background: #fbeceb; padding: 8px 12px; border-radius: 8px; margin: 4px 0; }
 .exito { color: var(--verde-oscuro); background: var(--verde-claro); padding: 8px 12px; border-radius: 8px; margin: 4px 0; }
 .buscador { width: 100%; margin: 8px 0; }
@@ -134,10 +148,10 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
   .fichar { grid-template-columns: 1fr; }
   .hora-actual { font-size: 2.6rem; }
   .fila { grid-template-columns: 1fr; }
-  .cabecera { padding: 10px 16px; gap: 8px; }
-  .marca { order: 1; }
-  .usuario { order: 2; margin-left: auto; }
-  .nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .cabecera-int { flex-wrap: wrap; gap: 0 16px; padding: 0 16px; min-height: 0; }
+  .marca { order: 1; padding: 12px 0; }
+  .usuario { order: 2; margin-left: auto; padding-left: 0; border-left: none; }
+  .nav { order: 3; flex: 1 0 100%; margin-left: 0; gap: 22px; overflow-x: auto; padding: 4px 0 10px; scrollbar-width: none; }
   .nav a { white-space: nowrap; }
   .usuario-nombre { display: none; }
 }
@@ -184,6 +198,17 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
 }
 .acceso-ojo:hover { background: rgba(137, 159, 117, 0.14); }
 .acceso-ojo:focus-visible { outline: 2px solid #6c8159; outline-offset: 1px; }
+.acceso-recordar { display: flex; flex-direction: row; align-self: flex-start; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--crema); user-select: none; }
+.acceso-recordar input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.acceso-check {
+  width: 20px; height: 20px; flex: none; border-radius: 6px; border: 2px solid var(--crema); background: transparent;
+  display: grid; place-items: center; transition: background 0.15s;
+}
+.acceso-recordar input:checked + .acceso-check { background: var(--crema); }
+.acceso-recordar input:checked + .acceso-check::after {
+  content: ""; width: 5px; height: 10px; border: solid #6c8159; border-width: 0 2.5px 2.5px 0; transform: translate(0, -1px) rotate(45deg);
+}
+.acceso-recordar input:focus-visible + .acceso-check { outline: 2px solid #fbfbfb; outline-offset: 2px; }
 .acceso-error {
   margin: 0; padding: 10px 18px; border-radius: 999px; background: var(--crema); color: #aa4b4b;
   font-size: 0.9rem; font-weight: 600; text-align: center;
