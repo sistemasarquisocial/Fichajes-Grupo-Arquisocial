@@ -5,6 +5,7 @@ import { getPool, sql } from "./db";
 
 export const COOKIE = "fich_sesion";
 const DURACION_SESION_H = 10;
+const DURACION_RECORDAR_D = 30;
 const MAX_INTENTOS = 5;
 const BLOQUEO_MIN = 15;
 // Hash ficticio para igualar tiempos cuando el email no existe
@@ -22,6 +23,8 @@ export interface UsuarioSesion {
   rol: Rol;
   empresaId: number;
   debeCambiarPassword: boolean;
+  /** Sesión iniciada con "Recordarme" (30 días). */
+  recordar?: boolean;
 }
 
 let secretoCache: string | null = null;
@@ -56,11 +59,14 @@ export function validarEmail(email: unknown): email is string {
 
 export const hashPassword = (pw: string) => bcrypt.hash(pw, 12);
 
-export async function crearToken(usuarioId: number, versionSesion: number): Promise<string> {
-  return jwt.sign({ uid: usuarioId, v: versionSesion }, await secreto(), { expiresIn: `${DURACION_SESION_H}h`, algorithm: "HS256" });
+export async function crearToken(usuarioId: number, versionSesion: number, recordar = false): Promise<string> {
+  return jwt.sign({ uid: usuarioId, v: versionSesion, r: recordar ? 1 : 0 }, await secreto(), {
+    expiresIn: recordar ? `${DURACION_RECORDAR_D}d` : `${DURACION_SESION_H}h`,
+    algorithm: "HS256",
+  });
 }
 
-export function cookieSesion(token: string) {
+export function cookieSesion(token: string, recordar = false) {
   return {
     name: COOKIE,
     value: token,
@@ -68,7 +74,7 @@ export function cookieSesion(token: string) {
     httpOnly: true,
     secure: true,
     sameSite: "Strict" as const,
-    maxAge: DURACION_SESION_H * 3600,
+    maxAge: recordar ? DURACION_RECORDAR_D * 86400 : DURACION_SESION_H * 3600,
   };
 }
 
@@ -120,6 +126,7 @@ export async function usuarioDeSesion(req: HttpRequest): Promise<UsuarioSesion |
     rol: u.Rol,
     empresaId: u.EmpresaId,
     debeCambiarPassword: !!u.DebeCambiarPassword,
+    recordar: payload.r === 1,
   };
 }
 
@@ -127,7 +134,7 @@ export type ResultadoLogin =
   | { ok: true; token: string; usuario: UsuarioSesion }
   | { ok: false; motivo: "credenciales" | "bloqueado" };
 
-export async function login(email: string, password: string): Promise<ResultadoLogin> {
+export async function login(email: string, password: string, recordar = false): Promise<ResultadoLogin> {
   const pool = await getPool();
   const r = await pool
     .request()
@@ -173,7 +180,7 @@ export async function login(email: string, password: string): Promise<ResultadoL
 
   return {
     ok: true,
-    token: await crearToken(u.UsuarioId, u.VersionSesion),
+    token: await crearToken(u.UsuarioId, u.VersionSesion, recordar),
     usuario: {
       usuarioId: u.UsuarioId,
       email: u.Email,
