@@ -4,9 +4,15 @@
     "exclude": [
       "/api/*",
       "/assets/*",
-      "*.{svg,png,ico,js,css,json}"
+      "*.{svg,png,ico,js,css,json,webmanifest,ttf,txt}"
     ]
   },
+  "mimeTypes": {
+    ".webmanifest": "application/manifest+json"
+  },
+  "routes": [
+    { "route": "/sw.js", "headers": { "Cache-Control": "no-cache" } }
+  ],
   "platform": {
     "apiRuntime": "node:20"
   },
@@ -14,6 +20,6 @@
     "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)"
   }
 }
