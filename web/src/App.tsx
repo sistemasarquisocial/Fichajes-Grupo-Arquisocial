@@ -5,8 +5,7 @@ import Setup from "./pages/Setup";
 import CambiarPassword from "./pages/CambiarPassword";
 import Fichar from "./pages/Fichar";
 import Historial from "./pages/Historial";
-import GestionUsuarios from "./pages/GestionUsuarios";
-import GestionEmpresas from "./pages/GestionEmpresas";
+import Admin from "./pages/Admin";
 
 export default function App() {
   const { usuario, cargando, salir } = useSesion();
@@ -38,9 +37,8 @@ export default function App() {
           <nav className="nav" aria-label="Principal">
             <NavLink to="/" end>Fichar</NavLink>
             <NavLink to="/historial">Mi historial</NavLink>
-            {esGestor && <NavLink to="/gestion/usuarios">Usuarios</NavLink>}
-            {esAdmin && <NavLink to="/gestion/empresas">Empresas</NavLink>}
             <NavLink to="/cuenta">Mi cuenta</NavLink>
+            {esGestor && <NavLink to="/admin">Admin</NavLink>}
           </nav>
           <div className="usuario">
             <span className="usuario-nombre">{usuario.nombre}</span>
@@ -53,8 +51,8 @@ export default function App() {
           <Route path="/" element={<Fichar />} />
           <Route path="/historial" element={<Historial />} />
           <Route path="/cuenta" element={<CambiarPassword />} />
-          {esGestor && <Route path="/gestion/usuarios" element={<GestionUsuarios />} />}
-          {esAdmin && <Route path="/gestion/empresas" element={<GestionEmpresas />} />}
+          {esGestor && <Route path="/admin/*" element={<Admin esAdmin={esAdmin} />} />}
+          {esGestor && <Route path="/gestion/*" element={<Navigate to="/admin" replace />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -260,6 +260,36 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
 .chip-activa { background: var(--verde-claro); color: var(--verde-oscuro); }
 .chip-inactiva { background: #eceeed; color: var(--texto-suave); }
 .vacio { padding: 16px; }
-.titulo-acciones h1 { margin-bottom: 2px; }
+.titulo-acciones h1, .titulo-acciones h2 { margin-bottom: 2px; }
 .titulo-acciones { margin-bottom: 14px; }
 @keyframes aparecer { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== Panel de administración ===== */
+.admin-titulo { margin-bottom: 18px; }
+.admin-titulo h1 { margin-bottom: 2px; }
+.admin-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 20px; align-items: start; }
+.admin-menu {
+  position: sticky; top: 84px; display: flex; flex-direction: column; gap: 4px;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); padding: 8px;
+}
+.admin-menu a {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 10px; text-decoration: none;
+  color: var(--texto-suave); border-left: 3px solid transparent; transition: background 0.15s, color 0.15s;
+}
+.admin-menu a svg { flex: none; margin-top: 1px; }
+.admin-menu a span { display: flex; flex-direction: column; gap: 2px; }
+.admin-menu a strong { color: var(--texto); font-size: 0.92rem; font-weight: 700; }
+.admin-menu a small { font-size: 0.78rem; }
+.admin-menu a:hover { background: #fafbf9; }
+.admin-menu a.active { background: var(--verde-claro); border-left-color: var(--verde); color: var(--verde-oscuro); }
+.admin-menu a.active strong { color: var(--verde-oscuro); }
+.admin-menu a:focus-visible { outline: 2px solid var(--verde); outline-offset: 1px; }
+.admin-contenido { min-width: 0; }
+@media (max-width: 860px) {
+  .admin-layout { grid-template-columns: 1fr; }
+  .admin-menu { position: static; flex-direction: row; overflow-x: auto; }
+  .admin-menu a { flex: 1 1 0; min-width: 0; align-items: center; padding: 10px; border-left: none; border-bottom: 3px solid transparent; }
+  .admin-menu a strong { font-size: 0.85rem; line-height: 1.2; }
+  .admin-menu a.active { border-bottom-color: var(--verde); }
+  .admin-menu a small { display: none; }
+}
