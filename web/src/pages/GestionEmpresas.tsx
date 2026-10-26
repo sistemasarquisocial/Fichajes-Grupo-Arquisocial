@@ -38,7 +38,7 @@ export default function GestionEmpresas() {
     <section>
       <div className="titulo-acciones">
         <div>
-          <h1>Empresas</h1>
+          <h2>Gestión de empresas</h2>
           <p className="sub">Empresas del grupo disponibles para asignar a usuarios y centros.</p>
         </div>
         <button className="btn btn-primario" onClick={() => { setMensaje(null); setAsistente(true); }}>+ Nueva empresa</button>
@@ -184,7 +184,7 @@ function AsistenteEmpresa({ existentes, onCerrar, onCreada }: { existentes: Empr
             <dt>Empresa</dt><dd>{limpio}</dd>
             <dt>Estado</dt><dd>Activa</dd>
           </dl>
-          <p className="nota">Después podrás añadir sus centros de trabajo y usuarios desde la pantalla Usuarios.</p>
+          <p className="nota">Después podrás añadir sus centros de trabajo y usuarios desde Gestión de usuarios.</p>
           {error && <p className="error" role="alert">{error}</p>}
           <div className="modal-acciones">
             <button type="button" className="btn btn-secundario" onClick={() => setPaso(1)} disabled={guardando}>Atrás</button>

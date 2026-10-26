@@ -100,7 +100,7 @@ export default function GestionUsuarios() {
     <section>
       <div className="tarjeta">
         <div className="titulo-acciones">
-          <h2>Usuarios</h2>
+          <h2>Gestión de usuarios</h2>
           <button className="btn btn-primario" onClick={abrirNuevo}>+ Nuevo usuario</button>
         </div>
         <input className="buscador" placeholder="Buscar por nombre, email, empresa o centro…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
