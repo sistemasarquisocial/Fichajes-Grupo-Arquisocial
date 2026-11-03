@@ -92,7 +92,7 @@ function hojaDetalle(wb: ExcelJS.Workbook, items: Item[], conEmpleado: boolean, 
       [6 + o, 7 + o].forEach((c) => (r.getCell(c).numFmt = '[h]:mm;;"—"'));
       r.eachCell({ includeEmpty: true }, (c, n) => {
         const k = n - o;
-        c.font = { name: FUENTE, size: 10, bold: k === 7, color: { argb: argb(k === 9 ? MARCA.rojo : k === 2 ? MARCA.gris : MARCA.negro) } };
+        c.font = { name: FUENTE, size: 10, bold: k === 7, color: { argb: argb(k === 9 ? (x.hayIncidencia ? MARCA.rojo : MARCA.gris) : k === 2 ? MARCA.gris : MARCA.negro) } };
         c.alignment = { horizontal: k <= 2 || k === 9 ? "left" : "center", vertical: "middle" };
         c.border = bordeFila;
         if (x.finDeSemana) c.fill = relleno(MARCA.grisClaro);
@@ -124,7 +124,7 @@ function hojaFichajes(wb: ExcelJS.Workbook, items: Item[], conEmpleado: boolean,
   const ws = wb.addWorksheet("Fichajes", { views: [{ state: "frozen", ySplit: 5, showGridLines: false }] });
   const o = conEmpleado ? 2 : 0;
   const cols = [...(conEmpleado ? ["Empleado/a", "Centro / Departamento"] : []), "Fecha", "Hora", "Tipo", "Ubicación en el momento del fichaje"];
-  ws.columns = [...(conEmpleado ? [{ width: 28 }, { width: 26 }] : []), { width: 12 }, { width: 9 }, { width: 16 }, { width: 40 }];
+  ws.columns = [...(conEmpleado ? [{ width: 28 }, { width: 26 }] : []), { width: 12 }, { width: 9 }, { width: 38 }, { width: 40 }];
   cabecera(ws, cols.length, "Fichajes", periodo, logoId);
   encabezadoTabla(ws, 5, cols, cols.length);
   let fila = 6;
@@ -137,7 +137,8 @@ function hojaFichajes(wb: ExcelJS.Workbook, items: Item[], conEmpleado: boolean,
       r.getCell(1 + o).numFmt = "dd/mm/yyyy";
       r.getCell(2 + o).numFmt = "hh:mm";
       r.eachCell((c, n) => {
-        c.font = { name: FUENTE, size: 10, color: { argb: argb(n === 4 + o && !x.ubicacion.startsWith("Sí") ? MARCA.rojo : MARCA.negro) } };
+        const sinUbi = n === 4 + o && !x.ubicacion.startsWith("Sí") && !x.ubicacion.startsWith("—");
+        c.font = { name: FUENTE, size: 10, color: { argb: argb(sinUbi ? MARCA.rojo : n === 3 + o && x.marcado ? MARCA.verdeOscuro : MARCA.negro) } };
         c.alignment = { horizontal: n === 2 + o ? "center" : "left" };
         c.border = bordeFila;
       });

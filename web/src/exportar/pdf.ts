@@ -135,7 +135,7 @@ function informeEmpleado(doc: jsPDF, d: DatosExportacion, inf: Informe, logo: Lo
       if (h.section !== "body") return;
       const dia = inf.dias[h.row.index];
       if (dia.finDeSemana) h.cell.styles.fillColor = hex(MARCA.grisClaro);
-      if (dia.incidencias.startsWith("Jornada en curso") && h.column.index === 7) h.cell.styles.textColor = hex(MARCA.gris);
+      if (!dia.hayIncidencia && h.column.index === 7) h.cell.styles.textColor = hex(MARCA.gris);
     },
   });
 
@@ -150,7 +150,10 @@ function informeEmpleado(doc: jsPDF, d: DatosExportacion, inf: Informe, logo: Lo
     startY: y2 + 3,
     head: [["Fecha", "Hora", "Tipo", "Ubicación en el momento del fichaje"]],
     body: inf.fichajes.length ? inf.fichajes.map((f) => [fechaES(f.fecha), f.hora, f.tipo, f.ubicacion]) : [["—", "—", "Sin fichajes en el periodo", ""]],
-    columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 16, halign: "center" }, 2: { cellWidth: 32 } },
+    columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 16, halign: "center" }, 2: { cellWidth: 70 } },
+    didParseCell: (h) => {
+      if (h.section === "body" && h.column.index === 2 && inf.fichajes[h.row.index]?.marcado) h.cell.styles.textColor = hex(MARCA.verdeOscuro);
+    },
   });
 }
 
