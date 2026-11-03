@@ -39,6 +39,7 @@ export function textoUbicacion(estado: string, precision: number | null): string
     case "TIMEOUT": return "No (tiempo agotado)";
     case "NO_SOPORTADA": return "No (navegador no compatible)";
     case "NO_DISPONIBLE": return "No (no disponible)";
+    case "CORRECCION": return "— (añadido por corrección aprobada)";
     default: return "Sin dato";
   }
 }
@@ -54,13 +55,17 @@ export interface FilaDia {
   numFichajes: number;
   ubicacion: string;
   incidencias: string;
+  /** El día tiene incidencias reales (jornada sin cerrar o fichajes sin ubicación). Las correcciones aprobadas son solo una nota. */
+  hayIncidencia: boolean;
 }
 
 export interface FilaFichaje {
   fecha: string;
   hora: string;
+  /** Tipo con la nota de corrección, si la hay: "Entrada (corregido, original 09:30)". */
   tipo: string;
   ubicacion: string;
+  marcado: boolean;
 }
 
 export interface Informe {
@@ -93,14 +98,19 @@ export function prepararInforme(d: DatosExportacion): Informe {
   for (let t = new Date(`${d.desde}T12:00:00Z`); t <= new Date(`${d.hasta}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + 1)) {
     const fecha = t.toISOString().slice(0, 10);
     const r = porDia.get(fecha);
-    const fs = fichajesDia.get(fecha) ?? [];
+    const todosDia = fichajesDia.get(fecha) ?? [];
+    const fs = todosDia.filter((f) => !f.anulado);
     const entradas = fs.filter((f) => f.tipo === "ENTRADA");
     const salidas = fs.filter((f) => f.tipo === "SALIDA");
-    const conUbi = fs.filter((f) => f.ubicacion === "OK").length;
+    const conGps = fs.filter((f) => f.ubicacion !== "CORRECCION");
+    const conUbi = conGps.filter((f) => f.ubicacion === "OK").length;
     const inc: string[] = [];
     if (r?.abierto && fecha !== hoy) inc.push("Jornada sin cerrar");
-    if (r?.abierto && fecha === hoy) inc.push("Jornada en curso");
-    if (fs.length && conUbi < fs.length) inc.push(`${fs.length - conUbi} fichaje(s) sin ubicación`);
+    if (conUbi < conGps.length) inc.push(`${conGps.length - conUbi} fichaje(s) sin ubicación`);
+    const hayIncidencia = inc.length > 0;
+    if (r?.abierto && fecha === hoy) inc.unshift("Jornada en curso");
+    const nCorr = todosDia.filter((f) => f.corregido || f.anadido || f.anulado).length;
+    if (nCorr) inc.push(`${nCorr} corrección(es) aprobada(s)`);
     dias.push({
       fecha,
       diaSemana: diaSemana(fecha),
@@ -110,14 +120,22 @@ export function prepararInforme(d: DatosExportacion): Informe {
       minutosPausa: r?.minutosPausa ?? 0,
       minutosTrabajados: r?.minutosTrabajados ?? 0,
       numFichajes: fs.length,
-      ubicacion: !fs.length ? "" : conUbi === fs.length ? "Sí" : conUbi === 0 ? "No" : "Parcial",
+      ubicacion: !conGps.length ? "" : conUbi === conGps.length ? "Sí" : conUbi === 0 ? "No" : "Parcial",
       incidencias: inc.join(" · "),
+      hayIncidencia,
     });
   }
 
   const fichajes: FilaFichaje[] = d.fichajes.map((f) => {
     const p = partes(f.fechaHoraUtc);
-    return { fecha: p.fecha, hora: p.hora, tipo: ETIQUETA_TIPO[f.tipo as TipoFichaje] ?? f.tipo, ubicacion: textoUbicacion(f.ubicacion, f.precision) };
+    const nota = f.anulado
+      ? " (anulado por corrección)"
+      : f.corregido && f.originalUtc
+        ? ` (corregido, original ${partes(f.originalUtc).fecha !== p.fecha ? `${fechaES(partes(f.originalUtc).fecha)} ` : ""}${partes(f.originalUtc).hora})`
+        : f.anadido
+          ? " (añadido por corrección)"
+          : "";
+    return { fecha: p.fecha, hora: p.hora, tipo: (ETIQUETA_TIPO[f.tipo as TipoFichaje] ?? f.tipo) + nota, ubicacion: textoUbicacion(f.ubicacion, f.precision), marcado: !!nota };
   });
 
   const totalMinutos = dias.reduce((s, x) => s + x.minutosTrabajados, 0);
@@ -135,9 +153,9 @@ export function prepararInforme(d: DatosExportacion): Informe {
     totalPausa,
     diasTrabajados,
     mediaMinutos: diasTrabajados ? Math.round(totalMinutos / diasTrabajados) : 0,
-    numIncidencias: dias.filter((x) => x.incidencias && !x.incidencias.startsWith("Jornada en curso")).length,
+    numIncidencias: dias.filter((x) => x.hayIncidencia).length,
     nombreCompleto: `${e.nombre} ${e.apellidos}`,
-    centro: e.centro ? `${e.codigoServicio ? `${e.codigoServicio} · ` : ""}${e.centro}` : "Sin centro asignado",
+    centro: e.centro ? `${e.codigoServicio ? `${e.codigoServicio} · ` : ""}${e.centro}` : e.departamento ? `Dpto. ${e.departamento}` : "Sin asignar",
     periodo: `${fechaES(d.desde)} – ${fechaES(d.hasta)}`,
     generado: `${fechaES(g.fecha)} ${g.hora}`,
     nombreArchivo: `Registro_jornada_${empresa}_${d.desde}_${d.hasta}_${apellido}-${nombre}`,
@@ -171,4 +189,6 @@ export function descargar(blob: Blob, nombre: string) {
 
 export const TEXTO_LEGAL =
   "Registro diario de jornada conforme al art. 34.9 del Estatuto de los Trabajadores. Los registros se conservan durante cuatro años. " +
-  "Las horas se calculan a partir de los fichajes registrados en el servidor (hora oficial de Madrid); los fichajes no pueden modificarse una vez registrados.";
+  "Las horas se calculan a partir de los fichajes registrados en el servidor (hora oficial de Madrid); los fichajes originales no se modifican: las correcciones aprobadas por el responsable se indican junto a la hora original.";
+
+export const nombreArchivoEquipo = (desde: string, hasta: string, n: number) => `Registro_jornada_equipo_${n}_empleados_${desde}_${hasta}`;

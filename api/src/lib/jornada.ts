@@ -4,6 +4,23 @@ export type Estado = "FUERA" | "TRABAJANDO" | "EN_PAUSA";
 export interface Fichaje {
   tipo: TipoFichaje;
   fechaHoraUtc: Date;
+  /** Datos de corrección (opcionales): se copian al detalle del día. */
+  id?: number | null;
+  corregido?: boolean;
+  originalUtc?: Date | null;
+  anadido?: boolean;
+  /** Anulado por una incidencia aceptada: se lista pero no cuenta. */
+  anulado?: boolean;
+}
+
+export interface FichajeDia {
+  tipo: TipoFichaje;
+  fechaHoraUtc: string;
+  id?: number | null;
+  corregido?: boolean;
+  originalUtc?: string | null;
+  anadido?: boolean;
+  anulado?: boolean;
 }
 
 export function estadoTras(ultimo: TipoFichaje | null): Estado {
@@ -39,7 +56,7 @@ export interface ResumenDia {
   minutosTrabajados: number;
   minutosPausa: number;
   abierto: boolean;
-  fichajes: { tipo: TipoFichaje; fechaHoraUtc: string }[];
+  fichajes: FichajeDia[];
 }
 
 /**
@@ -59,7 +76,13 @@ export function resumirPorDia(fichajes: Fichaje[], tz: string, ahora: Date = new
   let inicioPausa: Date | null = null;
 
   for (const f of fichajes) {
-    dia(f.fechaHoraUtc).fichajes.push({ tipo: f.tipo, fechaHoraUtc: f.fechaHoraUtc.toISOString() });
+    const item: FichajeDia = { tipo: f.tipo, fechaHoraUtc: f.fechaHoraUtc.toISOString() };
+    if (f.id !== undefined) item.id = f.id;
+    if (f.corregido) { item.corregido = true; item.originalUtc = f.originalUtc ? f.originalUtc.toISOString() : null; }
+    if (f.anadido) item.anadido = true;
+    if (f.anulado) item.anulado = true;
+    dia(f.fechaHoraUtc).fichajes.push(item);
+    if (f.anulado) continue;
     switch (f.tipo) {
       case "ENTRADA":
         inicioTrabajo = f.fechaHoraUtc;
@@ -94,3 +117,10 @@ export function resumirPorDia(fichajes: Fichaje[], tz: string, ahora: Date = new
 }
 
 const minutos = (a: Date, b: Date) => Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000));
+
+/** Nº de transiciones no válidas en una secuencia ordenada de fichajes (p. ej. dos ENTRADAS seguidas). */
+export function transicionesInvalidas(tipos: TipoFichaje[]): number {
+  let n = 0;
+  for (let i = 1; i < tipos.length; i++) if (!accionesPermitidas(estadoTras(tipos[i - 1])).includes(tipos[i])) n++;
+  return n;
+}

@@ -35,7 +35,7 @@ export default function ExportarHistorial({ desdeInicial, hastaInicial }: { desd
     setGenerando(formato);
     try {
       const datos = await api.exportar(p[0], p[1], formato);
-      if (formato === "pdf") (await import("../exportar/pdf")).exportarPdf(datos);
+      if (formato === "pdf") await (await import("../exportar/pdf")).exportarPdf(datos);
       else await (await import("../exportar/excel")).exportarExcel(datos);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar el archivo. Inténtalo de nuevo.");

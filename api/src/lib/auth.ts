@@ -13,8 +13,10 @@ const BLOQUEO_MIN = 15;
 let hashFicticio: string | null = null;
 const getHashFicticio = () => (hashFicticio ??= bcrypt.hashSync("usuario-inexistente", 12));
 
-export type Rol = "EMPLEADO" | "RESPONSABLE" | "RRHH" | "ADMIN";
-export const ROLES: Rol[] = ["EMPLEADO", "RESPONSABLE", "RRHH", "ADMIN"];
+export type Rol = "EMPLEADO" | "RRHH" | "ADMIN";
+export const ROLES: Rol[] = ["EMPLEADO", "RRHH", "ADMIN"];
+/** Roles con visibilidad de los fichajes de todos (además de la cadena de aprobación). */
+export const ROLES_VEN_TODO: Rol[] = ["RRHH", "ADMIN"];
 
 export interface UsuarioSesion {
   usuarioId: number;

@@ -2,6 +2,8 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import GestionUsuarios from "./GestionUsuarios";
 import GestionEmpresas from "./GestionEmpresas";
 import GestionCentros from "./GestionCentros";
+import GestionDepartamentos from "./GestionDepartamentos";
+import GestionSuplencias from "./GestionSuplencias";
 
 const IconoUsuarios = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -21,39 +23,56 @@ const IconoCentros = () => (
   </svg>
 );
 
-/** Panel de administración: agrupa la gestión de usuarios (ADMIN y RRHH), centros y empresas (solo ADMIN). */
-export default function Admin({ esAdmin }: { esAdmin: boolean }) {
+const IconoDepartamentos = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" d="M9 3h6v5H9zM3 16h6v5H3zM15 16h6v5h-6zM12 8v4M6 16v-4h12v4" />
+  </svg>
+);
+const IconoSuplencias = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" d="M7 7h11l-3-3M17 17H6l3 3" />
+  </svg>
+);
+
+/** Panel de administración (solo ADMIN): usuarios, departamentos, centros, empresas y suplencias. */
+export default function Admin() {
   return (
     <section className="admin">
       <div className="admin-titulo">
         <h1>Panel de administración</h1>
-        <p className="sub">Gestión de usuarios{esAdmin ? ", centros y empresas" : ""} de Grupo Arquisocial.</p>
+        <p className="sub">Usuarios, perfiles, cadena de aprobación, centros y empresas de Grupo Arquisocial.</p>
       </div>
       <div className="admin-layout">
         <nav className="admin-menu" aria-label="Secciones de administración">
           <NavLink to="usuarios">
             <IconoUsuarios />
-            <span><strong>Gestión de usuarios</strong><small>Altas, roles, centros y contraseñas</small></span>
+            <span><strong>Gestión de usuarios</strong><small>Altas, perfil, manager, roles y contraseñas</small></span>
           </NavLink>
-          {esAdmin && (
-            <NavLink to="centros">
-              <IconoCentros />
-              <span><strong>Gestión de centros</strong><small>Código de servicio, dirección y teléfono</small></span>
-            </NavLink>
-          )}
-          {esAdmin && (
-            <NavLink to="empresas">
-              <IconoEmpresas />
-              <span><strong>Gestión de empresas</strong><small>Alta, edición y desactivación</small></span>
-            </NavLink>
-          )}
+          <NavLink to="departamentos">
+            <IconoDepartamentos />
+            <span><strong>Gestión de departamentos</strong><small>Estructura y su manager</small></span>
+          </NavLink>
+          <NavLink to="centros">
+            <IconoCentros />
+            <span><strong>Gestión de centros</strong><small>Delegaciones, coordinador y gestor</small></span>
+          </NavLink>
+          <NavLink to="empresas">
+            <IconoEmpresas />
+            <span><strong>Gestión de empresas</strong><small>Alta, edición y desactivación</small></span>
+          </NavLink>
+          <NavLink to="suplencias">
+            <IconoSuplencias />
+            <span><strong>Suplencias</strong><small>Sustitutos de aprobadores ausentes</small></span>
+          </NavLink>
         </nav>
         <div className="admin-contenido">
           <Routes>
             <Route index element={<Navigate to="usuarios" replace />} />
             <Route path="usuarios" element={<GestionUsuarios />} />
-            {esAdmin && <Route path="centros" element={<GestionCentros />} />}
-            {esAdmin && <Route path="empresas" element={<GestionEmpresas />} />}
+            <Route path="departamentos" element={<GestionDepartamentos />} />
+            <Route path="centros" element={<GestionCentros />} />
+            <Route path="empresas" element={<GestionEmpresas />} />
+            <Route path="suplencias" element={<GestionSuplencias />} />
             <Route path="*" element={<Navigate to="usuarios" replace />} />
           </Routes>
         </div>

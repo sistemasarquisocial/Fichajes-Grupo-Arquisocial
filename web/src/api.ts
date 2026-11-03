@@ -1,4 +1,8 @@
-export type Rol = "EMPLEADO" | "RESPONSABLE" | "RRHH" | "ADMIN";
+export type Rol = "EMPLEADO" | "RRHH" | "ADMIN";
+export const ROLES: Rol[] = ["EMPLEADO", "RRHH", "ADMIN"];
+export const ETIQUETA_ROL: Record<Rol, string> = { EMPLEADO: "Empleado", RRHH: "RRHH", ADMIN: "Administrador" };
+export type TipoPerfil = "ESTRUCTURA" | "DELEGACION";
+export const ETIQUETA_PERFIL: Record<TipoPerfil, string> = { ESTRUCTURA: "Estructura", DELEGACION: "Delegación" };
 export type TipoFichaje = "ENTRADA" | "SALIDA" | "PAUSA_INICIO" | "PAUSA_FIN";
 export type Estado = "FUERA" | "TRABAJANDO" | "EN_PAUSA";
 
@@ -10,6 +14,22 @@ export interface Usuario {
   rol: Rol;
   empresaId: number;
   debeCambiarPassword: boolean;
+  /** Tiene personas a su cargo hoy (propias o por suplencia) o es RRHH/ADMIN. */
+  tieneEquipo?: boolean;
+  /** Incidencias pendientes que le toca resolver. */
+  pendientesAprobacion?: number;
+}
+
+/** Fichaje tal como se muestra: con las correcciones aprobadas aplicadas. */
+export interface FichajeDia {
+  tipo: TipoFichaje;
+  fechaHoraUtc: string;
+  /** Id del fichaje original (null si se añadió por incidencia). */
+  id?: number | null;
+  corregido?: boolean;
+  originalUtc?: string | null;
+  anadido?: boolean;
+  anulado?: boolean;
 }
 
 export interface ResumenDia {
@@ -17,7 +37,7 @@ export interface ResumenDia {
   minutosTrabajados: number;
   minutosPausa: number;
   abierto: boolean;
-  fichajes: { tipo: TipoFichaje; fechaHoraUtc: string }[];
+  fichajes: FichajeDia[];
 }
 
 export interface EstadoFichaje {
@@ -28,13 +48,15 @@ export interface EstadoFichaje {
 }
 
 export interface DatosExportacion {
-  empleado: { nombre: string; apellidos: string; email: string; empresa: string; centro: string | null; codigoServicio: string | null };
+  empleado: { nombre: string; apellidos: string; email: string; empresa: string; centro: string | null; codigoServicio: string | null; departamento?: string | null };
+  /** Nombre de quien exporta cuando no es el propio empleado. */
+  exportadoPor?: string | null;
   desde: string;
   hasta: string;
   generadoUtc: string;
   codigo: string;
   dias: { fecha: string; minutosTrabajados: number; minutosPausa: number; abierto: boolean }[];
-  fichajes: { id: number; tipo: TipoFichaje; fechaHoraUtc: string; ubicacion: string; precision: number | null }[];
+  fichajes: { id: number; tipo: TipoFichaje; fechaHoraUtc: string; ubicacion: string; precision: number | null; corregido?: boolean; originalUtc?: string | null; anadido?: boolean; anulado?: boolean }[];
 }
 
 export interface Empresa { id: number; nombre: string }
@@ -43,6 +65,7 @@ export interface Centro {
   id: number; codigoServicio: string | null; nombre: string; empresaId: number; empresa: string;
   direccion: string | null; codigoPostal: string | null; ciudad: string | null; telefono: string | null;
   activo: boolean; creadoUtc: string; usuariosActivos: number;
+  coordinadorId: number | null; coordinador: string | null; gestorId: number | null; gestor: string | null;
 }
 export interface DatosCentro {
   empresaId: number; codigoServicio: string; nombre: string;
@@ -50,10 +73,46 @@ export interface DatosCentro {
 }
 export interface UsuarioGestion {
   id: number; email: string; nombre: string; apellidos: string;
-  empresaId: number; empresa: string; centroId: number | null; centro: string | null;
+  empresaId: number; empresa: string; centroId: number | null; centro: string | null; codigoServicio: string | null;
+  tipoPerfil: TipoPerfil | null; departamentoId: number | null; departamento: string | null; managerId: number | null; manager: string | null;
+  aprobador: string | null; suplente: string | null; esCoordinador: boolean; esManagerDepartamento: boolean;
   rol: Rol; activo: boolean; debeCambiarPassword: boolean; bloqueado: number;
   ultimoAccesoUtc: string | null; creadoUtc: string;
 }
+
+/* ---------- Mi equipo ---------- */
+export interface Departamento { id: number; nombre: string; activo: boolean; creadoUtc: string; managerId: number | null; manager: string | null; miembros: number }
+export interface Suplencia { id: number; titularId: number; titular: string; suplenteId: number; suplente: string; desde: string; hasta: string; creadoPor: string; creadoUtc: string }
+export interface MiCadena { aprobador: string | null; suplenteDeMiAprobador: string | null; esAprobador: boolean; directos: number; suplencias: Suplencia[] }
+export interface EmpleadoEquipo {
+  id: number; nombre: string; apellidos: string; email: string; activo: boolean; tipoPerfil: TipoPerfil | null;
+  centroId: number | null; centro: string | null; codigoServicio: string | null; departamentoId: number | null; departamento: string | null;
+  minutosTrabajados: number; minutosPausa: number; diasTrabajados: number; diasConIncidencia: number; enCurso: boolean;
+}
+export interface IncidenciaEquipo {
+  empleadoId: number; nombre: string; apellidos: string; centro: string | null; codigoServicio: string | null; departamento: string | null;
+  fecha: string; tipo: "SIN_CERRAR" | "SIN_UBICACION"; detalle: string;
+}
+export interface DetalleEmpleado {
+  empleado: { id: number; nombre: string; apellidos: string; email: string; activo: boolean; centro: string | null; codigoServicio: string | null; departamento: string | null };
+  desde: string; hasta: string;
+  dias: { fecha: string; minutosTrabajados: number; minutosPausa: number; abierto: boolean; fichajes: (FichajeDia & { ubicacion: string })[] }[];
+}
+
+/* ---------- Incidencias ---------- */
+export type TipoIncidencia = "CAMBIAR_HORA" | "ANADIR" | "ANULAR";
+export type EstadoIncidencia = "PENDIENTE" | "ACEPTADA" | "RECHAZADA" | "RETIRADA";
+export const ETIQUETA_INCIDENCIA: Record<TipoIncidencia, string> = { CAMBIAR_HORA: "Cambiar la hora", ANADIR: "Añadir fichaje olvidado", ANULAR: "Anular fichaje erróneo" };
+export const ETIQUETA_ESTADO_INC: Record<EstadoIncidencia, string> = { PENDIENTE: "Pendiente", ACEPTADA: "Aceptada", RECHAZADA: "Rechazada", RETIRADA: "Retirada" };
+export interface Incidencia {
+  id: number; usuarioId: number; solicitante: string; centro: string | null; codigoServicio: string | null; departamento: string | null;
+  tipo: TipoIncidencia; fichajeId: number | null; tipoFichaje: TipoFichaje;
+  originalUtc: string | null; propuestaUtc: string | null; comentario: string;
+  estado: EstadoIncidencia; creadoUtc: string; resueltaPor: string | null; resueltaUtc: string | null; motivoRechazo: string | null;
+  /** Fichajes del día afectado (solo en pendientes de aprobación). */
+  contexto?: FichajeDia[];
+}
+export interface NuevaIncidencia { tipo: TipoIncidencia; fichajeId?: number; tipoFichaje?: TipoFichaje; fecha?: string; hora?: string; comentario: string }
 
 export type EstadoUbicacion = "OK" | "DENEGADA" | "NO_DISPONIBLE" | "TIMEOUT" | "NO_SOPORTADA";
 export interface ResultadoUbicacion {
@@ -121,6 +180,27 @@ export const api = {
   historial: (desde: string, hasta: string) =>
     llamar<{ desde: string; hasta: string; dias: ResumenDia[] }>("GET", `fichajes/historial?desde=${desde}&hasta=${hasta}`),
 
+  misIncidencias: () => llamar<{ resuelve: string; incidencias: Incidencia[] }>("GET", "incidencias/mias"),
+  crearIncidencia: (d: NuevaIncidencia) => llamar<{ id: number }>("POST", "incidencias", d),
+  retirarIncidencia: (id: number) => llamar("PUT", `incidencias/${id}/retirar`),
+  aprobaciones: (estado: "PENDIENTES" | "RESUELTAS") => llamar<{ incidencias: Incidencia[] }>("GET", `aprobaciones?estado=${estado}`),
+  contadorAprobaciones: () => llamar<{ pendientes: number }>("GET", "aprobaciones/contador"),
+  resolverIncidencia: (id: number, accion: "ACEPTAR" | "RECHAZAR", motivo?: string) => llamar("PUT", `aprobaciones/${id}/resolver`, { accion, motivo }),
+
+  equipoResumen: (desde: string, hasta: string) =>
+    llamar<{ desde: string; hasta: string; empleados: EmpleadoEquipo[]; incidencias: IncidenciaEquipo[] }>("GET", `equipo/resumen?desde=${desde}&hasta=${hasta}`),
+  miCadena: () => llamar<MiCadena>("GET", "equipo/mi-cadena"),
+  directorio: () => llamar<{ id: number; nombre: string }[]>("GET", "equipo/directorio"),
+  crearSuplencia: (d: { titularId?: number; suplenteId: number; desde: string; hasta: string }) => llamar<{ id: number }>("POST", "suplencias", d),
+  anularSuplencia: (id: number) => llamar("PUT", `suplencias/${id}/anular`),
+  suplenciasGestion: () => llamar<Suplencia[]>("GET", "gestion/suplencias"),
+  departamentos: () => llamar<Departamento[]>("GET", "gestion/departamentos"),
+  crearDepartamento: (d: { nombre: string; managerId: number | null }) => llamar<{ id: number }>("POST", "gestion/departamentos", d),
+  editarDepartamento: (id: number, d: { nombre?: string; managerId?: number | null; activo?: boolean }) => llamar("PUT", `gestion/departamentos/${id}`, d),
+  equipoDetalle: (id: number, desde: string, hasta: string) => llamar<DetalleEmpleado>("GET", `equipo/empleados/${id}/historial?desde=${desde}&hasta=${hasta}`),
+  equipoExportar: (ids: number[], desde: string, hasta: string, formato: "pdf" | "xlsx") =>
+    llamar<{ informes: DatosExportacion[] }>("GET", `equipo/exportar?ids=${ids.join(",")}&desde=${desde}&hasta=${hasta}&formato=${formato}`),
+
   usuarios: () => llamar<UsuarioGestion[]>("GET", "gestion/usuarios"),
   crearUsuario: (d: any) => llamar<{ id: number }>("POST", "gestion/usuarios", d),
   editarUsuario: (id: number, d: any) => llamar("PUT", `gestion/usuarios/${id}`, d),
@@ -132,6 +212,7 @@ export const api = {
   crearCentro: (d: DatosCentro) => llamar<{ id: number }>("POST", "gestion/centros", d),
   editarCentro: (id: number, d: DatosCentro) => llamar("PUT", `gestion/centros/${id}`, d),
   estadoCentro: (id: number, activo: boolean) => llamar("PUT", `gestion/centros/${id}/estado`, { activo }),
+  responsablesCentro: (id: number, d: { coordinadorId: number | null; gestorId: number | null }) => llamar("PUT", `gestion/centros/${id}/responsables`, d),
 };
 
 /* ---------- utilidades de formato ---------- */
@@ -140,6 +221,12 @@ export const hora = (iso: string) => new Date(iso).toLocaleTimeString("es-ES", {
 export const fechaLarga = (yyyyMmDd: string) =>
   new Date(`${yyyyMmDd}T12:00:00Z`).toLocaleDateString("es-ES", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
 export const duracion = (min: number) => `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} min`;
+export const fechaHora = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("es-ES", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric" })} ${hora(iso)}`;
+};
+/** Fecha local YYYY-MM-DD de un instante. */
+export const fechaDe = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(iso));
 export const hoyLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 export const restarDias = (yyyyMmDd: string, n: number) => {
   const d = new Date(`${yyyyMmDd}T12:00:00Z`);

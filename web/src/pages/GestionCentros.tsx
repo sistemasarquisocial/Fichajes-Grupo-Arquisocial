@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, ApiError, Centro, DatosCentro, Empresa } from "../api";
+import { api, ApiError, Centro, DatosCentro, Empresa, UsuarioGestion } from "../api";
 import Modal from "../components/Modal";
 
 type Mensaje = { tipo: "exito" | "error"; texto: string } | null;
@@ -42,6 +42,7 @@ export default function GestionCentros() {
   const [asistente, setAsistente] = useState(false);
   const [editando, setEditando] = useState<Centro | null>(null);
   const [confirmarEstado, setConfirmarEstado] = useState<Centro | null>(null);
+  const [responsables, setResponsables] = useState<Centro | null>(null);
 
   async function cargar() {
     try {
@@ -58,7 +59,7 @@ export default function GestionCentros() {
     const q = filtro.trim().toLowerCase();
     if (!centros) return [];
     if (!q) return centros;
-    return centros.filter((c) => `${c.codigoServicio ?? ""} ${c.nombre} ${c.empresa} ${c.ciudad ?? ""} ${c.direccion ?? ""}`.toLowerCase().includes(q));
+    return centros.filter((c) => `${c.codigoServicio ?? ""} ${c.nombre} ${c.empresa} ${c.ciudad ?? ""} ${c.direccion ?? ""} ${c.coordinador ?? ""} ${c.gestor ?? ""}`.toLowerCase().includes(q));
   }, [centros, filtro]);
 
   async function cambiarEstado(c: Centro) {
@@ -90,14 +91,14 @@ export default function GestionCentros() {
         ) : (
           <>
             <div className="tabla-buscador">
-              <input className="buscador" placeholder="Buscar por código, nombre, empresa o ciudad…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+              <input className="buscador" placeholder="Buscar por código, nombre, empresa, ciudad, coordinador o gestor…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
             </div>
             {filtrados.length === 0 ? (
               <p className="nota vacio">{centros.length ? "Ningún centro coincide con la búsqueda." : "Todavía no hay centros."}</p>
             ) : (
               <table className="tabla">
                 <thead>
-                  <tr><th>Código</th><th>Centro</th><th>Empresa</th><th>Dirección</th><th>Teléfono</th><th>Estado</th><th /></tr>
+                  <tr><th>Código</th><th>Centro</th><th>Empresa</th><th>Coordinador / Gestor</th><th>Dirección</th><th>Estado</th><th /></tr>
                 </thead>
                 <tbody>
                   {filtrados.map((c) => (
@@ -105,11 +106,15 @@ export default function GestionCentros() {
                       <td>{c.codigoServicio ? <span className="codigo">{c.codigoServicio}</span> : <span className="chip chip-pausa_inicio">Sin código</span>}</td>
                       <td><strong>{c.nombre}</strong><div className="nota">{c.usuariosActivos} usuario(s) activo(s)</div></td>
                       <td>{c.empresa}</td>
-                      <td>{direccionCompleta(c) || <span className="nota">—</span>}</td>
-                      <td className="nowrap">{c.telefono || <span className="nota">—</span>}</td>
+                      <td>
+                        <div>{c.coordinador ? <strong>{c.coordinador}</strong> : <span className="chip chip-pausa_inicio">Sin coordinador</span>}</div>
+                        <div className="nota">{c.gestor ? `Gestor: ${c.gestor}` : "Sin gestor"}</div>
+                      </td>
+                      <td>{direccionCompleta(c) || <span className="nota">—</span>}{c.telefono && <div className="nota">{c.telefono}</div>}</td>
                       <td><span className={`chip ${c.activo ? "chip-activa" : "chip-inactiva"}`}>{c.activo ? "Activo" : "Inactivo"}</span></td>
                       <td className="acciones-fila">
                         <button className="btn-link" onClick={() => { setMensaje(null); setEditando(c); }}>Editar</button>
+                        <button className="btn-link" onClick={() => { setMensaje(null); setResponsables(c); }}>Coordinador y gestor</button>
                         <button className="btn-link" onClick={() => setConfirmarEstado(c)}>{c.activo ? "Desactivar" : "Activar"}</button>
                       </td>
                     </tr>
@@ -143,6 +148,18 @@ export default function GestionCentros() {
           onGuardado={async () => {
             setEditando(null);
             setMensaje({ tipo: "exito", texto: "Centro actualizado." });
+            await cargar();
+          }}
+        />
+      )}
+
+      {responsables && (
+        <ResponsablesCentro
+          centro={responsables}
+          onCerrar={() => setResponsables(null)}
+          onGuardado={async () => {
+            setMensaje({ tipo: "exito", texto: `Coordinador y gestor de «${responsables.nombre}» actualizados.` });
+            setResponsables(null);
             await cargar();
           }}
         />
@@ -322,6 +339,70 @@ function EditarCentro({ centro, empresas, centros, onCerrar, onGuardado }: { cen
           <button className="btn btn-primario" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/* ---------- Coordinador y gestor del centro ---------- */
+function ResponsablesCentro({ centro, onCerrar, onGuardado }: { centro: Centro; onCerrar: () => void; onGuardado: () => void }) {
+  const [usuarios, setUsuarios] = useState<UsuarioGestion[] | null>(null);
+  const [coordinadorId, setCoordinadorId] = useState(centro.coordinadorId ? String(centro.coordinadorId) : "");
+  const [gestorId, setGestorId] = useState(centro.gestorId ? String(centro.gestorId) : "");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    api.usuarios().then(setUsuarios).catch((err) => setError(err instanceof ApiError ? err.message : "No se pudieron cargar los usuarios"));
+  }, []);
+
+  const activos = (usuarios ?? []).filter((u) => u.activo).sort((a, b) => `${a.apellidos} ${a.nombre}`.localeCompare(`${b.apellidos} ${b.nombre}`, "es"));
+  // Primero los del propio centro (coordinador) y los de estructura (gestor)
+  const opcCoord = [...activos.filter((u) => u.centroId === centro.id), ...activos.filter((u) => u.centroId !== centro.id)];
+  const opcGestor = [...activos.filter((u) => u.tipoPerfil === "ESTRUCTURA"), ...activos.filter((u) => u.tipoPerfil !== "ESTRUCTURA")];
+  const etiqueta = (u: UsuarioGestion) => `${u.nombre} ${u.apellidos}${u.tipoPerfil === "ESTRUCTURA" && u.departamento ? ` · ${u.departamento}` : u.centro ? ` · ${u.centro}` : ""}`;
+
+  async function guardar() {
+    setError("");
+    if (coordinadorId && coordinadorId === gestorId) return setError("El coordinador y el gestor no pueden ser la misma persona.");
+    setGuardando(true);
+    try {
+      await api.responsablesCentro(centro.id, { coordinadorId: coordinadorId ? Number(coordinadorId) : null, gestorId: gestorId ? Number(gestorId) : null });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar");
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <Modal titulo={`Coordinador y gestor · ${centro.codigoServicio ? `${centro.codigoServicio} · ` : ""}${centro.nombre}`} onCerrar={onCerrar} ancho>
+      {!usuarios && !error ? (
+        <div className="centrado-bloque"><div className="spinner" aria-label="Cargando" /></div>
+      ) : (
+        <div className="form-modal">
+          <label>
+            Coordinador del centro
+            <select value={coordinadorId} onChange={(e) => setCoordinadorId(e.target.value)}>
+              <option value="">(Sin coordinador)</option>
+              {opcCoord.map((u) => <option key={u.id} value={u.id}>{etiqueta(u)}</option>)}
+            </select>
+          </label>
+          <p className="nota">Aprueba a los empleados del centro. Puede coordinar varios centros, siempre con el mismo gestor.</p>
+          <label>
+            Gestor
+            <select value={gestorId} onChange={(e) => setGestorId(e.target.value)}>
+              <option value="">(Sin gestor)</option>
+              {opcGestor.map((u) => <option key={u.id} value={u.id}>{etiqueta(u)}</option>)}
+            </select>
+          </label>
+          <p className="nota">Aprueba al coordinador. Al gestor le aprueba el manager de su departamento de Gestión (director territorial).</p>
+          {error && <p className="error" role="alert">{error}</p>}
+          <div className="modal-acciones">
+            <button type="button" className="btn btn-secundario" onClick={onCerrar}>Cancelar</button>
+            <button className="btn btn-primario" onClick={guardar} disabled={guardando || !usuarios}>{guardando ? "Guardando…" : "Guardar"}</button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
