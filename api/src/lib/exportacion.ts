@@ -1,7 +1,8 @@
 import { getPool, sql } from "./db";
 import { firmar, UsuarioSesion } from "./auth";
 import { auditar } from "./auditoria";
-import { resumirPorDia, fechaLocal, TipoFichaje } from "./jornada";
+import { resumirPorDia, fechaLocal } from "./jornada";
+import { fichajesEfectivos } from "./correcciones";
 
 export const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -48,39 +49,32 @@ export async function datosExportacion(empleadoId: number, desde: string, hasta:
   if (!d) return null;
 
   const { ini, fin } = limitesConsulta(desde, hasta);
-  const r = await pool
-    .request()
-    .input("uid", sql.Int, empleadoId)
-    .input("desde", sql.DateTime2, ini)
-    .input("hasta", sql.DateTime2, fin)
-    .query(
-      `SELECT FichajeId, Tipo, FechaHoraUtc, UbicacionEstado, PrecisionM
-         FROM fich.Fichajes
-        WHERE UsuarioId = @uid AND FechaHoraUtc BETWEEN @desde AND @hasta
-        ORDER BY FechaHoraUtc, FichajeId`
-    );
-  const todos = r.recordset as { FichajeId: number; Tipo: TipoFichaje; FechaHoraUtc: Date; UbicacionEstado: string | null; PrecisionM: number | null }[];
+  // Fichajes efectivos: con las correcciones aprobadas aplicadas (el original queda visible como "corregido")
+  const todos = (await fichajesEfectivos([empleadoId], ini, fin)).get(empleadoId) ?? [];
   const enRango = todos.filter((f) => {
-    const fl = fechaLocal(f.FechaHoraUtc, TZ());
+    const fl = fechaLocal(f.fechaHoraUtc, TZ());
     return fl >= desde && fl <= hasta;
   });
-  const dias = resumirPorDia(
-    todos.map((f) => ({ tipo: f.Tipo, fechaHoraUtc: f.FechaHoraUtc })),
-    TZ()
-  )
+  const dias = resumirPorDia(todos, TZ())
     .filter((x) => x.fecha >= desde && x.fecha <= hasta)
     .map(({ fecha, minutosTrabajados, minutosPausa, abierto }) => ({ fecha, minutosTrabajados, minutosPausa, abierto }));
 
+  let n = 0;
   const fichajes = enRango.map((f) => ({
-    id: Number(f.FichajeId),
-    tipo: f.Tipo,
-    fechaHoraUtc: f.FechaHoraUtc.toISOString(),
-    ubicacion: f.UbicacionEstado ?? "SIN_DATO",
-    precision: f.PrecisionM,
+    // Los añadidos por incidencia no tienen FichajeId: se numeran en negativo para identificarlos en el informe
+    id: f.id ?? -++n,
+    tipo: f.tipo,
+    fechaHoraUtc: f.fechaHoraUtc.toISOString(),
+    ubicacion: f.ubicacion,
+    precision: f.precision,
+    corregido: f.corregido,
+    originalUtc: f.originalUtc ? f.originalUtc.toISOString() : null,
+    anadido: f.anadido,
+    anulado: f.anulado,
   }));
   const generadoUtc = new Date().toISOString();
   const firma = await firmar(
-    JSON.stringify({ u: empleadoId, a: actor.usuarioId, desde, hasta, g: generadoUtc, f: fichajes.map((f) => [f.id, f.tipo, f.fechaHoraUtc, f.ubicacion]) })
+    JSON.stringify({ u: empleadoId, a: actor.usuarioId, desde, hasta, g: generadoUtc, f: fichajes.map((f) => [f.id, f.tipo, f.fechaHoraUtc, f.ubicacion, f.originalUtc, f.anulado]) })
   );
   const codigo = firma.slice(0, 16).toUpperCase().match(/.{4}/g)!.join("-");
   const propio = empleadoId === actor.usuarioId;
