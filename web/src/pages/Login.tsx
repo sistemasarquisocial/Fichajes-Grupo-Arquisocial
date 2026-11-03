@@ -92,7 +92,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="acceso-nota">¿Has olvidado tu contraseña? Contacta con RRHH o con Sistemas.</p>
+        <p className="acceso-nota">¿Has olvidado tu contraseña? Contacta con Sistemas.</p>
         {necesitaSetup && (
           <p className="acceso-nota"><Link to="/setup">Configuración inicial</Link></p>
         )}
