@@ -3,23 +3,50 @@ import { getPool, sql } from "../lib/db";
 import { hashPassword, validarEmail, validarPassword, ipCliente, ROLES, Rol } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
+import { cargarOrg, aprobadorEfectivo, nombreDe, TipoPerfil } from "../lib/organizacion";
 
 // Nota: las rutas no pueden empezar por "admin" (reservado por Azure Functions), por eso "gestion".
-const GESTORES: Rol[] = ["ADMIN", "RRHH"];
+// Solo ADMIN gestiona usuarios, perfiles y estructura. RRHH solo supervisa fichajes.
+const GESTORES: Rol[] = ["ADMIN"];
 
 const SELECT_USUARIO = `
   SELECT u.UsuarioId AS id, u.Email AS email, u.Nombre AS nombre, u.Apellidos AS apellidos,
-         u.EmpresaId AS empresaId, e.Nombre AS empresa, u.CentroId AS centroId, c.Nombre AS centro,
+         u.EmpresaId AS empresaId, e.Nombre AS empresa, u.CentroId AS centroId, c.Nombre AS centro, c.CodigoServicio AS codigoServicio,
+         u.TipoPerfil AS tipoPerfil, u.DepartamentoId AS departamentoId, d.Nombre AS departamento, u.ManagerId AS managerId,
          u.Rol AS rol, u.Activo AS activo, u.DebeCambiarPassword AS debeCambiarPassword,
          CASE WHEN u.BloqueadoHastaUtc > SYSUTCDATETIME() THEN 1 ELSE 0 END AS bloqueado,
          u.UltimoAccesoUtc AS ultimoAccesoUtc, u.CreadoUtc AS creadoUtc
     FROM fich.Usuarios u
     JOIN fich.Empresas e ON e.EmpresaId = u.EmpresaId
-    LEFT JOIN fich.Centros c ON c.CentroId = u.CentroId`;
+    LEFT JOIN fich.Centros c ON c.CentroId = u.CentroId
+    LEFT JOIN fich.Departamentos d ON d.DepartamentoId = u.DepartamentoId`;
 
 /** Solo un ADMIN puede crear/editar otros ADMIN. */
 function puedeAsignarRol(actor: Rol, rol: Rol) {
   return rol !== "ADMIN" || actor === "ADMIN";
+}
+
+interface Perfil { tipoPerfil: TipoPerfil | null; departamentoId: number | null; centroId: number | null; managerId: number | null }
+
+/** Valida el perfil: ESTRUCTURA → departamento; DELEGACION → centro. El manager manual solo aplica a ESTRUCTURA. */
+async function validarPerfil(pool: sql.ConnectionPool, b: any, empresaId: number, propioId: number | null): Promise<Perfil | { error: string }> {
+  const tipo = b.tipoPerfil === "ESTRUCTURA" || b.tipoPerfil === "DELEGACION" ? (b.tipoPerfil as TipoPerfil) : null;
+  const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+  let departamentoId = tipo === "ESTRUCTURA" ? num(b.departamentoId) : null;
+  let centroId = tipo === "DELEGACION" ? num(b.centroId) : tipo === null ? num(b.centroId) : null;
+  const managerId = tipo === "ESTRUCTURA" ? num(b.managerId) : null;
+  if (tipo === "DELEGACION" && !centroId) return { error: "Un perfil de delegación debe tener centro" };
+  if (departamentoId !== null) {
+    const r = await pool.request().input("d", sql.Int, departamentoId).query("SELECT Activo FROM fich.Departamentos WHERE DepartamentoId = @d");
+    if (!r.recordset[0]?.Activo) return { error: "El departamento no existe o está inactivo" };
+  }
+  if (!(await centroValido(pool, centroId, empresaId))) return { error: "El centro no pertenece a la empresa" };
+  if (managerId !== null) {
+    if (managerId === propioId) return { error: "Una persona no puede ser su propio manager" };
+    const r = await pool.request().input("m", sql.Int, managerId).query("SELECT 1 AS ok FROM fich.Usuarios WHERE UsuarioId = @m AND Activo = 1");
+    if (!r.recordset.length) return { error: "El manager debe ser un usuario activo" };
+  }
+  return { tipoPerfil: tipo, departamentoId, centroId, managerId };
 }
 
 async function centroValido(pool: sql.ConnectionPool, centroId: number | null, empresaId: number) {
@@ -40,8 +67,21 @@ app.http("gestionUsuariosListar", {
   handler: conSesion(
     async () => {
       const pool = await getPool();
-      const r = await pool.request().query(`${SELECT_USUARIO} ORDER BY u.Activo DESC, u.Apellidos, u.Nombre`);
-      return json(200, r.recordset);
+      const [r, org] = await Promise.all([pool.request().query(`${SELECT_USUARIO} ORDER BY u.Activo DESC, u.Apellidos, u.Nombre`), cargarOrg()]);
+      return json(
+        200,
+        r.recordset.map((x: any) => {
+          const a = aprobadorEfectivo(org, x.id);
+          return {
+            ...x,
+            manager: nombreDe(org, x.managerId),
+            aprobador: nombreDe(org, a.titular),
+            suplente: a.efectivo !== a.titular ? nombreDe(org, a.efectivo) : null,
+            esCoordinador: (org.centrosQueCoordina.get(x.id) ?? []).length > 0,
+            esManagerDepartamento: (org.depsQueDirige.get(x.id) ?? []).length > 0,
+          };
+        })
+      );
     },
     { roles: GESTORES }
   ),
@@ -62,14 +102,14 @@ app.http("gestionUsuariosCrear", {
       if (!nombre || !apellidos) return error(400, "Nombre y apellidos son obligatorios");
       const empresaId = Number(b.empresaId);
       if (!empresaId) return error(400, "Empresa obligatoria");
-      const centroId = b.centroId ? Number(b.centroId) : null;
       const rol: Rol = ROLES.includes(b.rol) ? b.rol : "EMPLEADO";
       if (!puedeAsignarRol(actor.rol, rol)) return error(403, "Solo un administrador puede crear administradores");
       const errPw = validarPassword(b.passwordTemporal);
       if (errPw) return error(400, errPw);
 
       const pool = await getPool();
-      if (!(await centroValido(pool, centroId, empresaId))) return error(400, "El centro no pertenece a la empresa");
+      const perfil = await validarPerfil(pool, b, empresaId, null);
+      if ("error" in perfil) return error(400, perfil.error);
       const existe = await pool.request().input("e", sql.NVarChar(254), b.email.trim().toLowerCase()).query("SELECT 1 FROM fich.Usuarios WHERE EmailNormalizado = @e");
       if (existe.recordset.length) return error(409, "Ya existe un usuario con ese email");
 
@@ -80,16 +120,26 @@ app.http("gestionUsuariosCrear", {
         .input("nombre", sql.NVarChar(100), nombre)
         .input("apellidos", sql.NVarChar(150), apellidos)
         .input("empresa", sql.Int, empresaId)
-        .input("centro", sql.Int, centroId)
+        .input("centro", sql.Int, perfil.centroId)
         .input("rol", sql.VarChar(20), rol)
+        .input("tipo", sql.VarChar(12), perfil.tipoPerfil)
+        .input("dep", sql.Int, perfil.departamentoId)
+        .input("man", sql.Int, perfil.managerId)
         .input("hash", sql.VarChar(255), hash)
         .query(
-          `INSERT INTO fich.Usuarios (Email, Nombre, Apellidos, EmpresaId, CentroId, Rol, PasswordHash, DebeCambiarPassword)
+          `INSERT INTO fich.Usuarios (Email, Nombre, Apellidos, EmpresaId, CentroId, Rol, TipoPerfil, DepartamentoId, ManagerId, PasswordHash, DebeCambiarPassword)
            OUTPUT INSERTED.UsuarioId
-           VALUES (@email, @nombre, @apellidos, @empresa, @centro, @rol, @hash, 1)`
+           VALUES (@email, @nombre, @apellidos, @empresa, @centro, @rol, @tipo, @dep, @man, @hash, 1)`
         );
       const id = r.recordset[0].UsuarioId;
-      await auditar(actor.usuarioId, "CREAR_USUARIO", "Usuario", id, `${b.email} rol=${rol} empresa=${empresaId} centro=${centroId ?? "-"}`, ipCliente(req));
+      await auditar(
+        actor.usuarioId,
+        "CREAR_USUARIO",
+        "Usuario",
+        id,
+        `${b.email} rol=${rol} empresa=${empresaId} perfil=${perfil.tipoPerfil ?? "-"} centro=${perfil.centroId ?? "-"} departamento=${perfil.departamentoId ?? "-"} manager=${perfil.managerId ?? "-"}`,
+        ipCliente(req)
+      );
       return json(201, { id });
     },
     { roles: GESTORES }
@@ -108,7 +158,7 @@ app.http("gestionUsuariosEditar", {
       if (!b) return error(400, "Datos no válidos");
 
       const pool = await getPool();
-      const act = await pool.request().input("id", sql.Int, id).query("SELECT Rol, Activo, Email, EmpresaId, CentroId FROM fich.Usuarios WHERE UsuarioId = @id");
+      const act = await pool.request().input("id", sql.Int, id).query("SELECT Rol, Activo, Email, EmpresaId, CentroId, TipoPerfil, DepartamentoId, ManagerId FROM fich.Usuarios WHERE UsuarioId = @id");
       const actual = act.recordset[0];
       if (!actual) return error(404, "Usuario no encontrado");
       if (actual.Rol === "ADMIN" && actor.rol !== "ADMIN") return error(403, "Solo un administrador puede modificar administradores");
@@ -118,12 +168,12 @@ app.http("gestionUsuariosEditar", {
       const apellidos = String(b.apellidos ?? "").trim();
       if (!nombre || !apellidos) return error(400, "Nombre y apellidos son obligatorios");
       const empresaId = Number(b.empresaId);
-      const centroId = b.centroId ? Number(b.centroId) : null;
       const rol: Rol = ROLES.includes(b.rol) ? b.rol : actual.Rol;
       const activo = b.activo !== false;
       if (!puedeAsignarRol(actor.rol, rol)) return error(403, "Solo un administrador puede asignar el rol ADMIN");
       if (id === actor.usuarioId && (!activo || rol !== actor.rol)) return error(400, "No puedes desactivarte ni cambiar tu propio rol");
-      if (!(await centroValido(pool, centroId, empresaId))) return error(400, "El centro no pertenece a la empresa");
+      const perfil = await validarPerfil(pool, b, empresaId, id);
+      if ("error" in perfil) return error(400, perfil.error);
 
       const dup = await pool
         .request()
@@ -141,14 +191,17 @@ app.http("gestionUsuariosEditar", {
         .input("nombre", sql.NVarChar(100), nombre)
         .input("apellidos", sql.NVarChar(150), apellidos)
         .input("empresa", sql.Int, empresaId)
-        .input("centro", sql.Int, centroId)
+        .input("centro", sql.Int, perfil.centroId)
         .input("rol", sql.VarChar(20), rol)
+        .input("tipo", sql.VarChar(12), perfil.tipoPerfil)
+        .input("dep", sql.Int, perfil.departamentoId)
+        .input("man", sql.Int, perfil.managerId)
         .input("activo", sql.Bit, activo)
         .input("inv", sql.Int, invalidar)
         .query(
           `UPDATE fich.Usuarios
               SET Email = @email, Nombre = @nombre, Apellidos = @apellidos, EmpresaId = @empresa, CentroId = @centro,
-                  Rol = @rol, Activo = @activo, VersionSesion = VersionSesion + @inv, ModificadoUtc = SYSUTCDATETIME()
+                  Rol = @rol, TipoPerfil = @tipo, DepartamentoId = @dep, ManagerId = @man, Activo = @activo, VersionSesion = VersionSesion + @inv, ModificadoUtc = SYSUTCDATETIME()
             WHERE UsuarioId = @id`
         );
       await auditar(
@@ -156,7 +209,7 @@ app.http("gestionUsuariosEditar", {
         "EDITAR_USUARIO",
         "Usuario",
         id,
-        `antes: ${actual.Email} rol=${actual.Rol} activo=${actual.Activo} empresa=${actual.EmpresaId} centro=${actual.CentroId ?? "-"} | despues: ${b.email} rol=${rol} activo=${activo} empresa=${empresaId} centro=${centroId ?? "-"}`,
+        `antes: ${actual.Email} rol=${actual.Rol} activo=${actual.Activo} empresa=${actual.EmpresaId} perfil=${actual.TipoPerfil ?? "-"} centro=${actual.CentroId ?? "-"} departamento=${actual.DepartamentoId ?? "-"} manager=${actual.ManagerId ?? "-"} | despues: ${b.email} rol=${rol} activo=${activo} empresa=${empresaId} perfil=${perfil.tipoPerfil ?? "-"} centro=${perfil.centroId ?? "-"} departamento=${perfil.departamentoId ?? "-"} manager=${perfil.managerId ?? "-"}`,
         ipCliente(req)
       );
       return json(200, { ok: true });

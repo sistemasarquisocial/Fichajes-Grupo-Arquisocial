@@ -4,12 +4,12 @@ import { ipCliente, Rol } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
 
-/* Centros de trabajo.
-   - Listar: ADMIN y RRHH (necesario para asignar centro a usuarios).
-   - Crear / editar / activar-desactivar: solo ADMIN.
+/* Centros de trabajo (solo ADMIN).
+   - Listar, crear, editar, activar-desactivar.
+   - Coordinador (uno por centro, aprueba a los empleados del centro) y gestor (aprueba al coordinador).
    - Código de servicio: numérico, obligatorio en altas y único en todo el grupo. */
 
-const GESTORES: Rol[] = ["ADMIN", "RRHH"];
+const GESTORES: Rol[] = ["ADMIN"];
 
 interface DatosCentro {
   empresaId: number;
@@ -82,8 +82,12 @@ app.http("gestionCentrosListar", {
         `SELECT c.CentroId AS id, c.CodigoServicio AS codigoServicio, c.Nombre AS nombre, c.EmpresaId AS empresaId, e.Nombre AS empresa,
                 c.Direccion AS direccion, c.CodigoPostal AS codigoPostal, c.Ciudad AS ciudad, c.Telefono AS telefono,
                 c.Activo AS activo, c.CreadoUtc AS creadoUtc,
+                c.CoordinadorId AS coordinadorId, CASE WHEN co.UsuarioId IS NULL THEN NULL ELSE co.Nombre + N' ' + co.Apellidos END AS coordinador,
+                c.GestorId AS gestorId, CASE WHEN g.UsuarioId IS NULL THEN NULL ELSE g.Nombre + N' ' + g.Apellidos END AS gestor,
                 (SELECT COUNT(*) FROM fich.Usuarios u WHERE u.CentroId = c.CentroId AND u.Activo = 1) AS usuariosActivos
            FROM fich.Centros c JOIN fich.Empresas e ON e.EmpresaId = c.EmpresaId
+           LEFT JOIN fich.Usuarios co ON co.UsuarioId = c.CoordinadorId
+           LEFT JOIN fich.Usuarios g ON g.UsuarioId = c.GestorId
           ORDER BY c.Activo DESC, e.Nombre, c.Nombre`
       );
       return json(200, r.recordset.map((x: any) => ({ ...x, activo: !!x.activo })));
@@ -165,6 +169,65 @@ app.http("gestionCentrosEstado", {
         .query("UPDATE fich.Centros SET Activo = @a OUTPUT INSERTED.Nombre WHERE CentroId = @id");
       if (!r.recordset[0]) return error(404, "Centro no encontrado");
       await auditar(actor.usuarioId, "EDITAR_CENTRO", "Centro", id, b.activo ? "activado" : "desactivado", ipCliente(req));
+      return json(200, { ok: true });
+    },
+    { roles: ["ADMIN"] }
+  ),
+});
+
+/* ---------- Coordinador y gestor del centro ---------- */
+app.http("gestionCentrosResponsables", {
+  methods: ["PUT"],
+  authLevel: "anonymous",
+  route: "gestion/centros/{id:int}/responsables",
+  handler: conSesion(
+    async (req, _ctx, actor) => {
+      const id = Number(req.params.id);
+      const b = await leerJson(req);
+      const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+      const coordinadorId = num(b?.coordinadorId);
+      const gestorId = num(b?.gestorId);
+      if ((coordinadorId !== null && !Number.isInteger(coordinadorId)) || (gestorId !== null && !Number.isInteger(gestorId))) return error(400, "Datos no válidos");
+      if (coordinadorId !== null && coordinadorId === gestorId) return error(400, "El coordinador y el gestor no pueden ser la misma persona");
+
+      const pool = await getPool();
+      const act = await pool.request().input("id", sql.Int, id).query("SELECT Nombre, CoordinadorId, GestorId FROM fich.Centros WHERE CentroId = @id");
+      const actual = act.recordset[0];
+      if (!actual) return error(404, "Centro no encontrado");
+
+      for (const [uid, etiqueta] of [[coordinadorId, "coordinador"], [gestorId, "gestor"]] as const) {
+        if (uid === null) continue;
+        const r = await pool.request().input("u", sql.Int, uid).query("SELECT 1 AS ok FROM fich.Usuarios WHERE UsuarioId = @u AND Activo = 1");
+        if (!r.recordset.length) return error(400, `El ${etiqueta} debe ser un usuario activo`);
+      }
+      // Un coordinador puede llevar varios centros, pero siempre con el mismo gestor
+      if (coordinadorId !== null && gestorId !== null) {
+        const r = await pool
+          .request()
+          .input("co", sql.Int, coordinadorId)
+          .input("g", sql.Int, gestorId)
+          .input("id", sql.Int, id)
+          .query(
+            `SELECT TOP 1 c.Nombre FROM fich.Centros c
+              WHERE c.CoordinadorId = @co AND c.CentroId <> @id AND c.GestorId IS NOT NULL AND c.GestorId <> @g`
+          );
+        if (r.recordset[0]) return error(409, `Este coordinador también lleva «${r.recordset[0].Nombre}», que tiene otro gestor. Un coordinador debe tener un único gestor.`);
+      }
+
+      await pool
+        .request()
+        .input("id", sql.Int, id)
+        .input("co", sql.Int, coordinadorId)
+        .input("g", sql.Int, gestorId)
+        .query("UPDATE fich.Centros SET CoordinadorId = @co, GestorId = @g WHERE CentroId = @id");
+      await auditar(
+        actor.usuarioId,
+        "EDITAR_RESPONSABLES_CENTRO",
+        "Centro",
+        id,
+        `antes: coordinador=${actual.CoordinadorId ?? "-"} gestor=${actual.GestorId ?? "-"} | despues: coordinador=${coordinadorId ?? "-"} gestor=${gestorId ?? "-"}`,
+        ipCliente(req)
+      );
       return json(200, { ok: true });
     },
     { roles: ["ADMIN"] }

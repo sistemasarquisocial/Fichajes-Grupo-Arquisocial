@@ -13,6 +13,7 @@ import {
 } from "../lib/auth";
 import { json, error, leerJson, conSesion, publico } from "../lib/http";
 import { auditar } from "../lib/auditoria";
+import { cargarOrg, directosDe } from "../lib/organizacion";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
@@ -132,7 +133,21 @@ app.http("me", {
   methods: ["GET"],
   authLevel: "anonymous",
   route: "auth/me",
-  handler: conSesion(async (_req, _ctx, u) => json(200, { usuario: u }), { permitirCambioPendiente: true }),
+  handler: conSesion(
+    async (_req, _ctx, u) => {
+      // "Mi equipo" aparece si tiene directos hoy (propios o por suplencia) o si es RRHH/ADMIN
+      let tieneEquipo = u.rol === "RRHH" || u.rol === "ADMIN";
+      if (!tieneEquipo && !u.debeCambiarPassword) {
+        try {
+          tieneEquipo = directosDe(await cargarOrg(), u.usuarioId).length > 0;
+        } catch {
+          tieneEquipo = false;
+        }
+      }
+      return json(200, { usuario: { ...u, tieneEquipo } });
+    },
+    { permitirCambioPendiente: true }
+  ),
 });
 
 /* ---------- Cambiar mi contraseña ---------- */
