@@ -137,7 +137,7 @@ export function prepararInforme(d: DatosExportacion): Informe {
     mediaMinutos: diasTrabajados ? Math.round(totalMinutos / diasTrabajados) : 0,
     numIncidencias: dias.filter((x) => x.incidencias && !x.incidencias.startsWith("Jornada en curso")).length,
     nombreCompleto: `${e.nombre} ${e.apellidos}`,
-    centro: e.centro ? `${e.codigoServicio ? `${e.codigoServicio} · ` : ""}${e.centro}` : "Sin centro asignado",
+    centro: e.centro ? `${e.codigoServicio ? `${e.codigoServicio} · ` : ""}${e.centro}` : e.departamento ? `Dpto. ${e.departamento}` : "Sin asignar",
     periodo: `${fechaES(d.desde)} – ${fechaES(d.hasta)}`,
     generado: `${fechaES(g.fecha)} ${g.hora}`,
     nombreArchivo: `Registro_jornada_${empresa}_${d.desde}_${d.hasta}_${apellido}-${nombre}`,
@@ -172,3 +172,5 @@ export function descargar(blob: Blob, nombre: string) {
 export const TEXTO_LEGAL =
   "Registro diario de jornada conforme al art. 34.9 del Estatuto de los Trabajadores. Los registros se conservan durante cuatro años. " +
   "Las horas se calculan a partir de los fichajes registrados en el servidor (hora oficial de Madrid); los fichajes no pueden modificarse una vez registrados.";
+
+export const nombreArchivoEquipo = (desde: string, hasta: string, n: number) => `Registro_jornada_equipo_${n}_empleados_${desde}_${hasta}`;
