@@ -1,6 +1,7 @@
 import { app } from "@azure/functions";
 import { getPool, sql } from "../lib/db";
-import { ipCliente } from "../lib/auth";
+import { ipCliente, firmar } from "../lib/auth";
+import { auditar } from "../lib/auditoria";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { estadoTras, accionesPermitidas, resumirPorDia, fechaLocal, TipoFichaje } from "../lib/jornada";
 
@@ -151,5 +152,94 @@ app.http("historial", {
     ).filter((d) => d.fecha >= fDesde && d.fecha <= fHasta);
 
     return json(200, { desde: fDesde, hasta: fHasta, dias });
+  }),
+});
+
+/* ---------- Exportación del propio registro (PDF / Excel se generan en el navegador) ----------
+   Devuelve los datos del empleado, sus fichajes del periodo y un código de verificación
+   (HMAC del contenido con la clave interna). Cada exportación queda en la auditoría con su código. */
+app.http("exportarFichajes", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "fichajes/exportar",
+  handler: conSesion(async (req, _ctx, u) => {
+    const reFecha = /^\d{4}-\d{2}-\d{2}$/;
+    const desde = req.query.get("desde") ?? "";
+    const hasta = req.query.get("hasta") ?? "";
+    const formato = req.query.get("formato") ?? "";
+    if (!reFecha.test(desde) || !reFecha.test(hasta) || desde > hasta) return error(400, "Periodo no válido");
+    if (!["pdf", "xlsx"].includes(formato)) return error(400, "Formato no válido");
+    const dDesde = new Date(`${desde}T00:00:00Z`);
+    const dHasta = new Date(`${hasta}T00:00:00Z`);
+    if (isNaN(dDesde.getTime()) || isNaN(dHasta.getTime())) return error(400, "Periodo no válido");
+    if (dHasta.getTime() - dDesde.getTime() > 366 * 86400000) return error(400, "El periodo máximo es de 12 meses");
+    if (hasta > fechaLocal(new Date(), TZ())) return error(400, "El periodo no puede terminar en el futuro");
+
+    const pool = await getPool();
+    const emp = await pool
+      .request()
+      .input("uid", sql.Int, u.usuarioId)
+      .query(
+        `SELECT u.Nombre, u.Apellidos, u.Email, e.Nombre AS Empresa, c.Nombre AS Centro, c.CodigoServicio
+           FROM fich.Usuarios u
+           JOIN fich.Empresas e ON e.EmpresaId = u.EmpresaId
+           LEFT JOIN fich.Centros c ON c.CentroId = u.CentroId
+          WHERE u.UsuarioId = @uid`
+      );
+    const d = emp.recordset[0];
+
+    // Margen de 1 día por la diferencia horaria; después se filtra por fecha local
+    const r = await pool
+      .request()
+      .input("uid", sql.Int, u.usuarioId)
+      .input("desde", sql.DateTime2, new Date(dDesde.getTime() - 86400000))
+      .input("hasta", sql.DateTime2, new Date(dHasta.getTime() + 2 * 86400000))
+      .query(
+        `SELECT FichajeId, Tipo, FechaHoraUtc, UbicacionEstado, PrecisionM
+           FROM fich.Fichajes
+          WHERE UsuarioId = @uid AND FechaHoraUtc BETWEEN @desde AND @hasta
+          ORDER BY FechaHoraUtc, FichajeId`
+      );
+    const todos = r.recordset as { FichajeId: number; Tipo: TipoFichaje; FechaHoraUtc: Date; UbicacionEstado: string | null; PrecisionM: number | null }[];
+    const enRango = todos.filter((f) => {
+      const fl = fechaLocal(f.FechaHoraUtc, TZ());
+      return fl >= desde && fl <= hasta;
+    });
+    const dias = resumirPorDia(
+      todos.map((f) => ({ tipo: f.Tipo, fechaHoraUtc: f.FechaHoraUtc })),
+      TZ()
+    )
+      .filter((x) => x.fecha >= desde && x.fecha <= hasta)
+      .map(({ fecha, minutosTrabajados, minutosPausa, abierto }) => ({ fecha, minutosTrabajados, minutosPausa, abierto }));
+
+    const fichajes = enRango.map((f) => ({
+      id: Number(f.FichajeId),
+      tipo: f.Tipo,
+      fechaHoraUtc: f.FechaHoraUtc.toISOString(),
+      ubicacion: f.UbicacionEstado ?? "SIN_DATO",
+      precision: f.PrecisionM,
+    }));
+    const generadoUtc = new Date().toISOString();
+    const firma = await firmar(JSON.stringify({ u: u.usuarioId, desde, hasta, g: generadoUtc, f: fichajes.map((f) => [f.id, f.tipo, f.fechaHoraUtc, f.ubicacion]) }));
+    const codigo = firma.slice(0, 16).toUpperCase().match(/.{4}/g)!.join("-");
+
+    await auditar(u.usuarioId, "EXPORTAR_FICHAJES", "Usuario", u.usuarioId, `${formato} ${desde}..${hasta} fichajes=${fichajes.length} codigo=${codigo}`, ipCliente(req));
+
+    return json(200, {
+      empleado: {
+        nombre: d.Nombre,
+        apellidos: d.Apellidos,
+        email: d.Email,
+        empresa: d.Empresa,
+        centro: d.Centro ?? null,
+        codigoServicio: d.CodigoServicio ?? null,
+      },
+      desde,
+      hasta,
+      generadoUtc,
+      codigo,
+      dias,
+      fichajes,
+    });
   }),
 });

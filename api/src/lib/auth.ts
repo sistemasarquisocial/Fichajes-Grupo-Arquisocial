@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { HttpRequest } from "@azure/functions";
+import { createHmac } from "crypto";
 import { getPool, sql } from "./db";
 
 export const COOKIE = "fich_sesion";
@@ -37,6 +38,11 @@ async function secreto(): Promise<string> {
   if (!s || s.length < 32) throw new Error("JWT_SECRET no disponible o demasiado corto");
   secretoCache = s;
   return s;
+}
+
+/** Firma HMAC-SHA256 con la clave interna (no se puede recalcular sin acceso al servidor). */
+export async function firmar(texto: string): Promise<string> {
+  return createHmac("sha256", await secreto()).update(texto).digest("hex");
 }
 
 export async function leerConfig(clave: string): Promise<string | null> {

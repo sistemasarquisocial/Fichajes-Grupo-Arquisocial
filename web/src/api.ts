@@ -27,6 +27,16 @@ export interface EstadoFichaje {
   hoy: ResumenDia | null;
 }
 
+export interface DatosExportacion {
+  empleado: { nombre: string; apellidos: string; email: string; empresa: string; centro: string | null; codigoServicio: string | null };
+  desde: string;
+  hasta: string;
+  generadoUtc: string;
+  codigo: string;
+  dias: { fecha: string; minutosTrabajados: number; minutosPausa: number; abierto: boolean }[];
+  fichajes: { id: number; tipo: TipoFichaje; fechaHoraUtc: string; ubicacion: string; precision: number | null }[];
+}
+
 export interface Empresa { id: number; nombre: string }
 export interface EmpresaGestion { id: number; nombre: string; activa: boolean; creadoUtc: string; centros: number; usuariosActivos: number }
 export interface Centro {
@@ -106,6 +116,8 @@ export const api = {
       "fichajes",
       ubi.coords ? { tipo, ubicacion: ubi.coords } : { tipo, ubicacionEstado: ubi.estado }
     ),
+  exportar: (desde: string, hasta: string, formato: "pdf" | "xlsx") =>
+    llamar<DatosExportacion>("GET", `fichajes/exportar?desde=${desde}&hasta=${hasta}&formato=${formato}`),
   historial: (desde: string, hasta: string) =>
     llamar<{ desde: string; hasta: string; dias: ResumenDia[] }>("GET", `fichajes/historial?desde=${desde}&hasta=${hasta}`),
 

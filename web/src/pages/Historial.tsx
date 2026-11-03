@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, ResumenDia, hora, duracion, fechaLarga, hoyLocal, restarDias, ETIQUETA_TIPO } from "../api";
+import ExportarHistorial from "./ExportarHistorial";
 
 export default function Historial() {
   const [hasta, setHasta] = useState(hoyLocal());
@@ -35,6 +36,8 @@ export default function Historial() {
         {error && <p className="error">{error}</p>}
         {dias && <p className="nota">Total trabajado en el periodo: <strong>{duracion(total)}</strong> · {dias.length} día(s) con fichajes</p>}
       </div>
+
+      <ExportarHistorial desdeInicial={desde} hastaInicial={hasta} />
 
       {dias === null ? (
         <div className="centrado-bloque"><div className="spinner" /></div>
