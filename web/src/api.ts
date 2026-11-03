@@ -1,4 +1,8 @@
-export type Rol = "EMPLEADO" | "RESPONSABLE" | "RRHH" | "ADMIN";
+export type Rol = "EMPLEADO" | "RRHH" | "ADMIN";
+export const ROLES: Rol[] = ["EMPLEADO", "RRHH", "ADMIN"];
+export const ETIQUETA_ROL: Record<Rol, string> = { EMPLEADO: "Empleado", RRHH: "RRHH", ADMIN: "Administrador" };
+export type TipoPerfil = "ESTRUCTURA" | "DELEGACION";
+export const ETIQUETA_PERFIL: Record<TipoPerfil, string> = { ESTRUCTURA: "Estructura", DELEGACION: "Delegación" };
 export type TipoFichaje = "ENTRADA" | "SALIDA" | "PAUSA_INICIO" | "PAUSA_FIN";
 export type Estado = "FUERA" | "TRABAJANDO" | "EN_PAUSA";
 
@@ -10,6 +14,8 @@ export interface Usuario {
   rol: Rol;
   empresaId: number;
   debeCambiarPassword: boolean;
+  /** Tiene personas a su cargo hoy (propias o por suplencia) o es RRHH/ADMIN. */
+  tieneEquipo?: boolean;
 }
 
 export interface ResumenDia {
@@ -28,7 +34,9 @@ export interface EstadoFichaje {
 }
 
 export interface DatosExportacion {
-  empleado: { nombre: string; apellidos: string; email: string; empresa: string; centro: string | null; codigoServicio: string | null };
+  empleado: { nombre: string; apellidos: string; email: string; empresa: string; centro: string | null; codigoServicio: string | null; departamento?: string | null };
+  /** Nombre de quien exporta cuando no es el propio empleado. */
+  exportadoPor?: string | null;
   desde: string;
   hasta: string;
   generadoUtc: string;
@@ -43,6 +51,7 @@ export interface Centro {
   id: number; codigoServicio: string | null; nombre: string; empresaId: number; empresa: string;
   direccion: string | null; codigoPostal: string | null; ciudad: string | null; telefono: string | null;
   activo: boolean; creadoUtc: string; usuariosActivos: number;
+  coordinadorId: number | null; coordinador: string | null; gestorId: number | null; gestor: string | null;
 }
 export interface DatosCentro {
   empresaId: number; codigoServicio: string; nombre: string;
@@ -50,9 +59,30 @@ export interface DatosCentro {
 }
 export interface UsuarioGestion {
   id: number; email: string; nombre: string; apellidos: string;
-  empresaId: number; empresa: string; centroId: number | null; centro: string | null;
+  empresaId: number; empresa: string; centroId: number | null; centro: string | null; codigoServicio: string | null;
+  tipoPerfil: TipoPerfil | null; departamentoId: number | null; departamento: string | null; managerId: number | null; manager: string | null;
+  aprobador: string | null; suplente: string | null; esCoordinador: boolean; esManagerDepartamento: boolean;
   rol: Rol; activo: boolean; debeCambiarPassword: boolean; bloqueado: number;
   ultimoAccesoUtc: string | null; creadoUtc: string;
+}
+
+/* ---------- Mi equipo ---------- */
+export interface Departamento { id: number; nombre: string; activo: boolean; creadoUtc: string; managerId: number | null; manager: string | null; miembros: number }
+export interface Suplencia { id: number; titularId: number; titular: string; suplenteId: number; suplente: string; desde: string; hasta: string; creadoPor: string; creadoUtc: string }
+export interface MiCadena { aprobador: string | null; suplenteDeMiAprobador: string | null; esAprobador: boolean; directos: number; suplencias: Suplencia[] }
+export interface EmpleadoEquipo {
+  id: number; nombre: string; apellidos: string; email: string; activo: boolean; tipoPerfil: TipoPerfil | null;
+  centroId: number | null; centro: string | null; codigoServicio: string | null; departamentoId: number | null; departamento: string | null;
+  minutosTrabajados: number; minutosPausa: number; diasTrabajados: number; diasConIncidencia: number; enCurso: boolean;
+}
+export interface IncidenciaEquipo {
+  empleadoId: number; nombre: string; apellidos: string; centro: string | null; codigoServicio: string | null; departamento: string | null;
+  fecha: string; tipo: "SIN_CERRAR" | "SIN_UBICACION"; detalle: string;
+}
+export interface DetalleEmpleado {
+  empleado: { id: number; nombre: string; apellidos: string; email: string; activo: boolean; centro: string | null; codigoServicio: string | null; departamento: string | null };
+  desde: string; hasta: string;
+  dias: { fecha: string; minutosTrabajados: number; minutosPausa: number; abierto: boolean; fichajes: { tipo: TipoFichaje; fechaHoraUtc: string; ubicacion: string }[] }[];
 }
 
 export type EstadoUbicacion = "OK" | "DENEGADA" | "NO_DISPONIBLE" | "TIMEOUT" | "NO_SOPORTADA";
@@ -121,6 +151,20 @@ export const api = {
   historial: (desde: string, hasta: string) =>
     llamar<{ desde: string; hasta: string; dias: ResumenDia[] }>("GET", `fichajes/historial?desde=${desde}&hasta=${hasta}`),
 
+  equipoResumen: (desde: string, hasta: string) =>
+    llamar<{ desde: string; hasta: string; empleados: EmpleadoEquipo[]; incidencias: IncidenciaEquipo[] }>("GET", `equipo/resumen?desde=${desde}&hasta=${hasta}`),
+  miCadena: () => llamar<MiCadena>("GET", "equipo/mi-cadena"),
+  directorio: () => llamar<{ id: number; nombre: string }[]>("GET", "equipo/directorio"),
+  crearSuplencia: (d: { titularId?: number; suplenteId: number; desde: string; hasta: string }) => llamar<{ id: number }>("POST", "suplencias", d),
+  anularSuplencia: (id: number) => llamar("PUT", `suplencias/${id}/anular`),
+  suplenciasGestion: () => llamar<Suplencia[]>("GET", "gestion/suplencias"),
+  departamentos: () => llamar<Departamento[]>("GET", "gestion/departamentos"),
+  crearDepartamento: (d: { nombre: string; managerId: number | null }) => llamar<{ id: number }>("POST", "gestion/departamentos", d),
+  editarDepartamento: (id: number, d: { nombre?: string; managerId?: number | null; activo?: boolean }) => llamar("PUT", `gestion/departamentos/${id}`, d),
+  equipoDetalle: (id: number, desde: string, hasta: string) => llamar<DetalleEmpleado>("GET", `equipo/empleados/${id}/historial?desde=${desde}&hasta=${hasta}`),
+  equipoExportar: (ids: number[], desde: string, hasta: string, formato: "pdf" | "xlsx") =>
+    llamar<{ informes: DatosExportacion[] }>("GET", `equipo/exportar?ids=${ids.join(",")}&desde=${desde}&hasta=${hasta}&formato=${formato}`),
+
   usuarios: () => llamar<UsuarioGestion[]>("GET", "gestion/usuarios"),
   crearUsuario: (d: any) => llamar<{ id: number }>("POST", "gestion/usuarios", d),
   editarUsuario: (id: number, d: any) => llamar("PUT", `gestion/usuarios/${id}`, d),
@@ -132,6 +176,7 @@ export const api = {
   crearCentro: (d: DatosCentro) => llamar<{ id: number }>("POST", "gestion/centros", d),
   editarCentro: (id: number, d: DatosCentro) => llamar("PUT", `gestion/centros/${id}`, d),
   estadoCentro: (id: number, activo: boolean) => llamar("PUT", `gestion/centros/${id}/estado`, { activo }),
+  responsablesCentro: (id: number, d: { coordinadorId: number | null; gestorId: number | null }) => llamar("PUT", `gestion/centros/${id}/responsables`, d),
 };
 
 /* ---------- utilidades de formato ---------- */

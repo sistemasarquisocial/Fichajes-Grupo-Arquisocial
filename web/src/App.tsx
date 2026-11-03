@@ -6,6 +6,7 @@ import CambiarPassword from "./pages/CambiarPassword";
 import Fichar from "./pages/Fichar";
 import Historial from "./pages/Historial";
 import Admin from "./pages/Admin";
+import MiEquipo from "./pages/MiEquipo";
 
 export default function App() {
   const { usuario, cargando, salir } = useSesion();
@@ -23,7 +24,7 @@ export default function App() {
 
   if (usuario.debeCambiarPassword) return <CambiarPassword obligatorio />;
 
-  const esGestor = usuario.rol === "ADMIN" || usuario.rol === "RRHH";
+  const supervisa = !!usuario.tieneEquipo;
   const esAdmin = usuario.rol === "ADMIN";
 
   return (
@@ -37,8 +38,9 @@ export default function App() {
           <nav className="nav" aria-label="Principal">
             <NavLink to="/" end>Fichar</NavLink>
             <NavLink to="/historial">Mi historial</NavLink>
+            {supervisa && <NavLink to="/equipo">Mi equipo</NavLink>}
             <NavLink to="/cuenta">Mi cuenta</NavLink>
-            {esGestor && <NavLink to="/admin">Admin</NavLink>}
+            {esAdmin && <NavLink to="/admin">Admin</NavLink>}
           </nav>
           <div className="usuario">
             <span className="usuario-nombre">{usuario.nombre}</span>
@@ -51,8 +53,9 @@ export default function App() {
           <Route path="/" element={<Fichar />} />
           <Route path="/historial" element={<Historial />} />
           <Route path="/cuenta" element={<CambiarPassword />} />
-          {esGestor && <Route path="/admin/*" element={<Admin esAdmin={esAdmin} />} />}
-          {esGestor && <Route path="/gestion/*" element={<Navigate to="/admin" replace />} />}
+          {supervisa && <Route path="/equipo" element={<MiEquipo />} />}
+          {esAdmin && <Route path="/admin/*" element={<Admin />} />}
+          {esAdmin && <Route path="/gestion/*" element={<Navigate to="/admin" replace />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
