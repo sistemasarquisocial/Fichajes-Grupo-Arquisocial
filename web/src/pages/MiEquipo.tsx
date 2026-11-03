@@ -5,6 +5,7 @@ import {
 } from "../api";
 import { useSesion } from "../sesion";
 import Modal from "../components/Modal";
+import ChipFichaje from "../components/ChipFichaje";
 
 /* "Mi equipo": fichajes de las personas que aprueba el usuario (sus directos y, durante una suplencia,
    los del titular) o de todos (RRHH y ADMIN). Incluye la gestión de la propia suplencia. */
@@ -277,6 +278,7 @@ const TEXTO_UBI: Record<string, string> = {
   NO_SOPORTADA: "Sin ubicación (navegador no compatible)",
   NO_DISPONIBLE: "Sin ubicación (no disponible)",
   SIN_DATO: "Sin dato de ubicación",
+  CORRECCION: "Añadido por corrección aprobada",
 };
 
 function DetalleModal({ empleado, periodo, onCerrar }: { empleado: { id: number; nombre: string; apellidos: string }; periodo: [string, string]; onCerrar: () => void }) {
@@ -331,9 +333,13 @@ function DetalleModal({ empleado, periodo, onCerrar }: { empleado: { id: number;
                   <td>
                     <div className="chips">
                       {x.fichajes.map((f, i) => (
-                        <span key={i} className={`chip chip-${f.tipo.toLowerCase()}${f.ubicacion === "OK" ? "" : " chip-sin-ubi"}`} title={TEXTO_UBI[f.ubicacion] ?? f.ubicacion}>
-                          {ETIQUETA_TIPO[f.tipo]} {hora(f.fechaHoraUtc)}{f.ubicacion === "OK" ? "" : " ⚠"}
-                        </span>
+                        <ChipFichaje
+                          key={i}
+                          f={f}
+                          extraClase={f.ubicacion === "OK" || f.ubicacion === "CORRECCION" ? "" : "chip-sin-ubi"}
+                          sufijo={f.ubicacion === "OK" || f.ubicacion === "CORRECCION" ? "" : " ⚠"}
+                          titulo={`${ETIQUETA_TIPO[f.tipo]} · ${TEXTO_UBI[f.ubicacion] ?? f.ubicacion}`}
+                        />
                       ))}
                     </div>
                   </td>

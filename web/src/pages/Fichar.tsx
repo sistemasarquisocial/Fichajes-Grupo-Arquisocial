@@ -1,3 +1,4 @@
+import { notaCorreccion } from "../components/ChipFichaje";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, EstadoFichaje, TipoFichaje, hora, duracion, ETIQUETA_TIPO, obtenerUbicacion, TEXTO_UBICACION } from "../api";
 import { useSesion } from "../sesion";
@@ -93,7 +94,9 @@ export default function Fichar() {
             </div>
             <ul className="lista-fichajes">
               {datos.hoy.fichajes.map((f, i) => (
-                <li key={i}><span className={`punto punto-${f.tipo.toLowerCase()}`} />{ETIQUETA_TIPO[f.tipo]}<span className="hora">{hora(f.fechaHoraUtc)}</span></li>
+                <li key={i} className={f.anulado ? "anulado" : ""} title={notaCorreccion(f) ?? undefined}>
+                  <span className={`punto punto-${f.tipo.toLowerCase()}`} />{ETIQUETA_TIPO[f.tipo]}{f.corregido ? " (corregido)" : f.anadido ? " (añadido)" : f.anulado ? " (anulado)" : ""}<span className="hora">{hora(f.fechaHoraUtc)}</span>
+                </li>
               ))}
             </ul>
           </>
