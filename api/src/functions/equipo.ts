@@ -5,7 +5,8 @@ import { json, error, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
 import { idsVisibles, puedeVerEmpleado } from "../lib/organizacion";
 import { errorPeriodo, limitesConsulta, datosExportacion, TZ } from "../lib/exportacion";
-import { resumirPorDia, fechaLocal, TipoFichaje } from "../lib/jornada";
+import { resumirPorDia, fechaLocal } from "../lib/jornada";
+import { fichajesEfectivos } from "../lib/correcciones";
 
 /* "Mi equipo": cada aprobador ve a sus directos (y a los del titular al que suple); RRHH y ADMIN ven a todos.
    La cadena de aprobación se calcula en lib/organizacion.ts. Nunca se devuelven coordenadas. */
@@ -13,8 +14,6 @@ import { resumirPorDia, fechaLocal, TipoFichaje } from "../lib/jornada";
 const MAX_DIAS_RESUMEN = 92;
 const MAX_DIAS_DETALLE = 186;
 const MAX_EMPLEADOS_EXPORT = 100;
-
-interface FilaFichaje { UsuarioId: number; FichajeId: number; Tipo: TipoFichaje; FechaHoraUtc: Date; UbicacionEstado: string | null }
 
 /** Condición SQL sobre u.UsuarioId según la visibilidad (usa el parámetro @ids). */
 const filtroIds = (ids: number[] | null) => (ids === null ? "1 = 1" : "u.UsuarioId IN (SELECT CAST(value AS INT) FROM STRING_SPLIT(@ids, ','))");
@@ -51,32 +50,18 @@ app.http("equipoResumen", {
         );
 
       const { ini, fin } = limitesConsulta(desde, hasta);
-      const fich = await pool
-        .request()
-        .input("ids", sql.NVarChar(sql.MAX), lista)
-        .input("ini", sql.DateTime2, ini)
-        .input("fin", sql.DateTime2, fin)
-        .query(
-          `SELECT f.UsuarioId, f.FichajeId, f.Tipo, f.FechaHoraUtc, f.UbicacionEstado
-             FROM fich.Fichajes f JOIN fich.Usuarios u ON u.UsuarioId = f.UsuarioId
-            WHERE ${filtro} AND f.FechaHoraUtc BETWEEN @ini AND @fin
-            ORDER BY f.UsuarioId, f.FechaHoraUtc, f.FichajeId`
-        );
-      const porUsuario = new Map<number, FilaFichaje[]>();
-      for (const f of fich.recordset as FilaFichaje[]) {
-        if (!porUsuario.has(f.UsuarioId)) porUsuario.set(f.UsuarioId, []);
-        porUsuario.get(f.UsuarioId)!.push(f);
-      }
+      const porUsuario = await fichajesEfectivos(ids, ini, fin);
 
       const hoy = fechaLocal(new Date(), TZ());
       const incidencias: any[] = [];
       const empleados = emp.recordset.map((e: any) => {
         const lista = porUsuario.get(e.id) ?? [];
-        const dias = resumirPorDia(lista.map((f) => ({ tipo: f.Tipo, fechaHoraUtc: f.FechaHoraUtc })), TZ()).filter((d) => d.fecha >= desde && d.fecha <= hasta);
+        const dias = resumirPorDia(lista, TZ()).filter((d) => d.fecha >= desde && d.fecha <= hasta);
         const sinUbicacion = new Map<string, number>();
         for (const f of lista) {
-          const fl = fechaLocal(f.FechaHoraUtc, TZ());
-          if (fl >= desde && fl <= hasta && f.UbicacionEstado !== "OK") sinUbicacion.set(fl, (sinUbicacion.get(fl) ?? 0) + 1);
+          if (f.anulado || f.ubicacion === "OK" || f.ubicacion === "CORRECCION") continue;
+          const fl = fechaLocal(f.fechaHoraUtc, TZ());
+          if (fl >= desde && fl <= hasta) sinUbicacion.set(fl, (sinUbicacion.get(fl) ?? 0) + 1);
         }
         const diasIncidencia = new Set<string>();
         const base = { empleadoId: e.id, nombre: e.nombre, apellidos: e.apellidos, centro: e.centro ?? null, codigoServicio: e.codigoServicio ?? null, departamento: e.departamento ?? null };
@@ -136,18 +121,8 @@ app.http("equipoDetalle", {
       if (!emp.recordset[0]) return error(404, "Empleado no encontrado");
 
       const { ini, fin } = limitesConsulta(desde, hasta);
-      const r = await pool
-        .request()
-        .input("id", sql.Int, id)
-        .input("ini", sql.DateTime2, ini)
-        .input("fin", sql.DateTime2, fin)
-        .query(
-          `SELECT FichajeId, Tipo, FechaHoraUtc, UbicacionEstado FROM fich.Fichajes
-            WHERE UsuarioId = @id AND FechaHoraUtc BETWEEN @ini AND @fin
-            ORDER BY FechaHoraUtc, FichajeId`
-        );
-      const lista = r.recordset as Omit<FilaFichaje, "UsuarioId">[];
-      const dias = resumirPorDia(lista.map((f) => ({ tipo: f.Tipo, fechaHoraUtc: f.FechaHoraUtc })), TZ())
+      const lista = (await fichajesEfectivos([id], ini, fin)).get(id) ?? [];
+      const dias = resumirPorDia(lista, TZ())
         .filter((d) => d.fecha >= desde && d.fecha <= hasta)
         .map((d) => ({
           fecha: d.fecha,
@@ -155,8 +130,16 @@ app.http("equipoDetalle", {
           minutosPausa: d.minutosPausa,
           abierto: d.abierto,
           fichajes: lista
-            .filter((f) => fechaLocal(f.FechaHoraUtc, TZ()) === d.fecha)
-            .map((f) => ({ tipo: f.Tipo, fechaHoraUtc: f.FechaHoraUtc.toISOString(), ubicacion: f.UbicacionEstado ?? "SIN_DATO" })),
+            .filter((f) => fechaLocal(f.fechaHoraUtc, TZ()) === d.fecha)
+            .map((f) => ({
+              tipo: f.tipo,
+              fechaHoraUtc: f.fechaHoraUtc.toISOString(),
+              ubicacion: f.ubicacion,
+              corregido: f.corregido,
+              originalUtc: f.originalUtc ? f.originalUtc.toISOString() : null,
+              anadido: f.anadido,
+              anulado: f.anulado,
+            })),
         }));
 
       if (id !== u.usuarioId) {
