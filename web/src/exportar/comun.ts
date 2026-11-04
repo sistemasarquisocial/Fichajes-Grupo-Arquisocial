@@ -52,6 +52,8 @@ export interface FilaDia {
   salida: string;
   minutosPausa: number;
   minutosTrabajados: number;
+  /** Horas de ausencias justificadas aprobadas (no se suman a lo trabajado). */
+  minutosJustificados: number;
   numFichajes: number;
   ubicacion: string;
   incidencias: string;
@@ -73,6 +75,7 @@ export interface Informe {
   fichajes: FilaFichaje[];
   totalMinutos: number;
   totalPausa: number;
+  totalJustificado: number;
   diasTrabajados: number;
   mediaMinutos: number;
   numIncidencias: number;
@@ -87,6 +90,7 @@ export interface Informe {
 export function prepararInforme(d: DatosExportacion): Informe {
   const hoy = partes(new Date().toISOString()).fecha;
   const porDia = new Map(d.dias.map((x) => [x.fecha, x]));
+  const justificados = new Map((d.justificados ?? []).map((x) => [x.fecha, x]));
   const fichajesDia = new Map<string, DatosExportacion["fichajes"]>();
   for (const f of d.fichajes) {
     const k = partes(f.fechaHoraUtc).fecha;
@@ -111,6 +115,8 @@ export function prepararInforme(d: DatosExportacion): Informe {
     if (r?.abierto && fecha === hoy) inc.unshift("Jornada en curso");
     const nCorr = todosDia.filter((f) => f.corregido || f.anadido || f.anulado).length;
     if (nCorr) inc.push(`${nCorr} corrección(es) aprobada(s)`);
+    const j = justificados.get(fecha);
+    if (j) inc.push(`Ausencia justificada: ${j.motivos.join(", ")}`);
     dias.push({
       fecha,
       diaSemana: diaSemana(fecha),
@@ -119,6 +125,7 @@ export function prepararInforme(d: DatosExportacion): Informe {
       salida: salidas.length ? partes(salidas[salidas.length - 1].fechaHoraUtc).hora : "",
       minutosPausa: r?.minutosPausa ?? 0,
       minutosTrabajados: r?.minutosTrabajados ?? 0,
+      minutosJustificados: j?.minutos ?? 0,
       numFichajes: fs.length,
       ubicacion: !conGps.length ? "" : conUbi === conGps.length ? "Sí" : conUbi === 0 ? "No" : "Parcial",
       incidencias: inc.join(" · "),
@@ -140,6 +147,7 @@ export function prepararInforme(d: DatosExportacion): Informe {
 
   const totalMinutos = dias.reduce((s, x) => s + x.minutosTrabajados, 0);
   const totalPausa = dias.reduce((s, x) => s + x.minutosPausa, 0);
+  const totalJustificado = dias.reduce((s, x) => s + x.minutosJustificados, 0);
   const diasTrabajados = dias.filter((x) => x.minutosTrabajados > 0).length;
   const e = d.empleado;
   const g = partes(d.generadoUtc);
@@ -151,6 +159,7 @@ export function prepararInforme(d: DatosExportacion): Informe {
     fichajes,
     totalMinutos,
     totalPausa,
+    totalJustificado,
     diasTrabajados,
     mediaMinutos: diasTrabajados ? Math.round(totalMinutos / diasTrabajados) : 0,
     numIncidencias: dias.filter((x) => x.hayIncidencia).length,

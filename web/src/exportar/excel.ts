@@ -67,8 +67,8 @@ interface Item { d: DatosExportacion; inf: Informe }
 function hojaDetalle(wb: ExcelJS.Workbook, items: Item[], conEmpleado: boolean, periodo: string, pie: string, logoId: number) {
   const ws = wb.addWorksheet("Detalle diario", { views: [{ state: "frozen", ySplit: 5, xSplit: conEmpleado ? 1 : 0, showGridLines: false }] });
   const o = conEmpleado ? 2 : 0;
-  const cols = [...(conEmpleado ? ["Empleado/a", "Centro / Departamento"] : []), "Fecha", "Día", "Entrada", "Salida", "Nº fichajes", "Pausas", "Trabajado", "Ubicación", "Incidencias"];
-  ws.columns = [...(conEmpleado ? [{ width: 28 }, { width: 26 }] : []), { width: 12 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 11 }, { width: 10 }, { width: 12 }, { width: 11 }, { width: 44 }];
+  const cols = [...(conEmpleado ? ["Empleado/a", "Centro / Departamento"] : []), "Fecha", "Día", "Entrada", "Salida", "Nº fichajes", "Pausas", "Trabajado", "Justificado", "Ubicación", "Incidencias"];
+  ws.columns = [...(conEmpleado ? [{ width: 28 }, { width: 26 }] : []), { width: 12 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 11 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 11 }, { width: 44 }];
   cabecera(ws, cols.length, "Detalle diario", periodo, logoId);
   encabezadoTabla(ws, 5, cols, 2 + o);
   let fila = 6;
@@ -84,24 +84,25 @@ function hojaDetalle(wb: ExcelJS.Workbook, items: Item[], conEmpleado: boolean, 
         x.numFichajes || null,
         minExcel(x.minutosPausa),
         minExcel(x.minutosTrabajados),
+        minExcel(x.minutosJustificados),
         x.ubicacion || null,
         x.incidencias || null,
       ];
       r.getCell(1 + o).numFmt = "dd/mm/yyyy";
       [3 + o, 4 + o].forEach((c) => (r.getCell(c).numFmt = "hh:mm"));
-      [6 + o, 7 + o].forEach((c) => (r.getCell(c).numFmt = '[h]:mm;;"—"'));
+      [6 + o, 7 + o, 8 + o].forEach((c) => (r.getCell(c).numFmt = '[h]:mm;;"—"'));
       r.eachCell({ includeEmpty: true }, (c, n) => {
         const k = n - o;
-        c.font = { name: FUENTE, size: 10, bold: k === 7, color: { argb: argb(k === 9 ? (x.hayIncidencia ? MARCA.rojo : MARCA.gris) : k === 2 ? MARCA.gris : MARCA.negro) } };
-        c.alignment = { horizontal: k <= 2 || k === 9 ? "left" : "center", vertical: "middle" };
+        c.font = { name: FUENTE, size: 10, bold: k === 7, color: { argb: argb(k === 10 ? (x.hayIncidencia ? MARCA.rojo : MARCA.gris) : k === 2 ? MARCA.gris : MARCA.negro) } };
+        c.alignment = { horizontal: k <= 2 || k === 10 ? "left" : "center", vertical: "middle" };
         c.border = bordeFila;
         if (x.finDeSemana) c.fill = relleno(MARCA.grisClaro);
       });
     }
   }
   const ultima = fila - 1;
-  const [cN, cP, cT] = [5 + o, 6 + o, 7 + o].map(col);
-  const tot = items.reduce((s, i) => ({ f: s.f + i.inf.fichajes.length, p: s.p + i.inf.totalPausa, t: s.t + i.inf.totalMinutos }), { f: 0, p: 0, t: 0 });
+  const [cN, cP, cT, cJ] = [5 + o, 6 + o, 7 + o, 8 + o].map(col);
+  const tot = items.reduce((s, i) => ({ f: s.f + i.inf.fichajes.length, p: s.p + i.inf.totalPausa, t: s.t + i.inf.totalMinutos, j: s.j + i.inf.totalJustificado }), { f: 0, p: 0, t: 0, j: 0 });
   filaTotal(
     ws,
     fila,
@@ -110,8 +111,9 @@ function hojaDetalle(wb: ExcelJS.Workbook, items: Item[], conEmpleado: boolean, 
       [5 + o]: { formula: `SUM(${cN}6:${cN}${ultima})`, result: tot.f },
       [6 + o]: { formula: `SUM(${cP}6:${cP}${ultima})`, result: minExcel(tot.p) },
       [7 + o]: { formula: `SUM(${cT}6:${cT}${ultima})`, result: minExcel(tot.t) },
+      [8 + o]: { formula: `SUM(${cJ}6:${cJ}${ultima})`, result: minExcel(tot.j) },
     },
-    { [6 + o]: "[h]:mm", [7 + o]: "[h]:mm" }
+    { [6 + o]: "[h]:mm", [7 + o]: "[h]:mm", [8 + o]: "[h]:mm" }
   );
   ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: ultima, column: cols.length } };
   ws.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "5:5" };
@@ -187,6 +189,7 @@ export async function exportarExcel(entrada: DatosExportacion | DatosExportacion
       ["", ""],
       ["Horas trabajadas", { formula: `SUM('Detalle diario'!G6:G${ultima})`, result: minExcel(inf.totalMinutos) }, "[h]:mm"],
       ["Tiempo en pausa", { formula: `SUM('Detalle diario'!F6:F${ultima})`, result: minExcel(inf.totalPausa) }, "[h]:mm"],
+      ["Horas justificadas (ausencias)", { formula: `SUM('Detalle diario'!H6:H${ultima})`, result: minExcel(inf.totalJustificado) }, "[h]:mm"],
       ["Días con jornada", inf.diasTrabajados],
       ["Media por día trabajado", minExcel(inf.mediaMinutos), "[h]:mm"],
       ["Días con incidencias", inf.numIncidencias],
@@ -210,7 +213,7 @@ export async function exportarExcel(entrada: DatosExportacion | DatosExportacion
       if (fmt) b.numFmt = fmt;
       a.border = bordeFila;
       b.border = bordeFila;
-      if (i >= 6 && i <= 11) b.fill = relleno(MARCA.verdeClaro);
+      if (i >= 6 && i <= 12) b.fill = relleno(MARCA.verdeClaro);
     });
     textoLegal(rs, 5 + datos.length + 1, 2);
     rs.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } };

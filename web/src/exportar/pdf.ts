@@ -107,7 +107,7 @@ function informeEmpleado(doc: jsPDF, d: DatosExportacion, inf: Informe, logo: Lo
   autoTable(doc, {
     ...estiloTabla,
     startY: y + 3,
-    head: [["Fecha", "Día", "Entrada", "Salida", "Pausas", "Trabajado", "Ubicación", "Incidencias"]],
+    head: [["Fecha", "Día", "Entrada", "Salida", "Pausas", "Trabajado", "Justificado", "Ubicación", "Incidencias"]],
     body: inf.dias.map((x) => [
       fechaES(x.fecha),
       x.diaSemana,
@@ -115,10 +115,11 @@ function informeEmpleado(doc: jsPDF, d: DatosExportacion, inf: Informe, logo: Lo
       x.salida || "—",
       x.minutosPausa ? hhmm(x.minutosPausa) : "—",
       x.minutosTrabajados ? hhmm(x.minutosTrabajados) : "—",
+      x.minutosJustificados ? hhmm(x.minutosJustificados) : "—",
       x.ubicacion || "—",
       x.incidencias,
     ]),
-    foot: [["Total", "", "", "", hhmm(inf.totalPausa), hhmm(inf.totalMinutos), "", ""]],
+    foot: [["Total", "", "", "", hhmm(inf.totalPausa), hhmm(inf.totalMinutos), inf.totalJustificado ? hhmm(inf.totalJustificado) : "—", "", ""]],
     footStyles: { fillColor: hex(MARCA.verdeClaro), textColor: hex(MARCA.verdeOscuro), fontStyle: "bold" },
     showFoot: "lastPage",
     columnStyles: {
@@ -127,15 +128,16 @@ function informeEmpleado(doc: jsPDF, d: DatosExportacion, inf: Informe, logo: Lo
       2: { cellWidth: 15, halign: "center" },
       3: { cellWidth: 15, halign: "center" },
       4: { cellWidth: 15, halign: "center" },
-      5: { cellWidth: 18, halign: "center", fontStyle: "bold" },
-      6: { cellWidth: 19, halign: "center" },
-      7: { textColor: hex(MARCA.rojo), fontSize: 7.4 },
+      5: { cellWidth: 17, halign: "center", fontStyle: "bold" },
+      6: { cellWidth: 17, halign: "center" },
+      7: { cellWidth: 17, halign: "center" },
+      8: { textColor: hex(MARCA.rojo), fontSize: 7.4 },
     },
     didParseCell: (h) => {
       if (h.section !== "body") return;
       const dia = inf.dias[h.row.index];
       if (dia.finDeSemana) h.cell.styles.fillColor = hex(MARCA.grisClaro);
-      if (!dia.hayIncidencia && h.column.index === 7) h.cell.styles.textColor = hex(MARCA.gris);
+      if (!dia.hayIncidencia && h.column.index === 8) h.cell.styles.textColor = hex(MARCA.gris);
     },
   });
 
