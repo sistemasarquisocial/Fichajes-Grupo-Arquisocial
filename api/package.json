@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@azure/functions": "^4.5.0",
+    "@azure/storage-blob": "12.34.0",
     "bcryptjs": "^2.4.3",
     "date-holidays": "3.38.0",
     "jsonwebtoken": "^9.0.2",
