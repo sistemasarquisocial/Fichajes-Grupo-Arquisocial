@@ -63,7 +63,7 @@ export default function GestionUsuarios() {
       ...form,
       empresaId: Number(form.empresaId),
       tipoPerfil: form.tipoPerfil || null,
-      centroId: form.tipoPerfil !== "ESTRUCTURA" && form.centroId ? Number(form.centroId) : null,
+      centroId: form.centroId ? Number(form.centroId) : null,
       departamentoId: form.tipoPerfil === "ESTRUCTURA" && form.departamentoId ? Number(form.departamentoId) : null,
       managerId: form.tipoPerfil === "ESTRUCTURA" && form.managerId ? Number(form.managerId) : null,
     };
@@ -157,6 +157,14 @@ export default function GestionUsuarios() {
                     {candidatosManager.map((u) => <option key={u.id} value={u.id}>{u.nombre} {u.apellidos}</option>)}
                   </select>
                   <small className="nota">Le aprueba esta persona cuando es manager de un departamento o no tiene departamento. Si no, le aprueba el manager de su departamento.</small>
+                </label>
+                <label>
+                  Centro de trabajo (sede)
+                  <select value={form.centroId} onChange={set("centroId")} disabled={!form.empresaId}>
+                    <option value="">(Sin centro)</option>
+                    {centrosEmpresa.map((c) => <option key={c.id} value={c.id}>{c.codigoServicio ? `${c.codigoServicio} · ` : ""}{c.nombre}</option>)}
+                  </select>
+                  <small className="nota">Solo para su calendario de festivos y avisos. Le sigue aprobando su departamento, no el coordinador del centro.</small>
                 </label>
               </>
             ) : (
