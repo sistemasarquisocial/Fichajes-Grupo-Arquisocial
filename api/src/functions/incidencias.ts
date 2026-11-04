@@ -10,6 +10,7 @@ import {
   TIPOS_INCIDENCIA, TipoIncidencia, Propuesta, puedeResolver, solicitantesDe, quienResuelve, contarPendientes,
   errorSecuencia, entorno, errorFecha,
 } from "../lib/incidencias";
+import { contarAvisosEscalados } from "../lib/horarios";
 
 /* Incidencias de fichaje (ver lib/incidencias.ts y db/007_incidencias.sql).
    El fichaje original nunca se modifica: al aceptar se registra una corrección (LEDGER) que la app aplica encima. */
@@ -202,7 +203,11 @@ app.http("aprobacionesContador", {
   methods: ["GET"],
   authLevel: "anonymous",
   route: "aprobaciones/contador",
-  handler: conSesion(async (_req, _ctx, u) => json(200, { pendientes: await contarPendientes(await cargarOrg(), u) })),
+  handler: conSesion(async (_req, _ctx, u) => {
+    const org = await cargarOrg();
+    const [pendientes, avisosEquipo] = await Promise.all([contarPendientes(org, u), contarAvisosEscalados(org, u.usuarioId)]);
+    return json(200, { pendientes, avisosEquipo });
+  }),
 });
 
 /* ---------- Resolver: aceptar (registra la corrección) o rechazar (motivo obligatorio) ---------- */
