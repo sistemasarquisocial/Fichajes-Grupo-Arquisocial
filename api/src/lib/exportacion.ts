@@ -3,6 +3,7 @@ import { firmar, UsuarioSesion } from "./auth";
 import { auditar } from "./auditoria";
 import { resumirPorDia, fechaLocal } from "./jornada";
 import { fichajesEfectivos } from "./correcciones";
+import { justificadoPorDia } from "./horarios";
 
 export const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -72,6 +73,8 @@ export async function datosExportacion(empleadoId: number, desde: string, hasta:
     anadido: f.anadido,
     anulado: f.anulado,
   }));
+  // Ausencias justificadas aprobadas: columna aparte, no se suman a lo trabajado
+  const justificados = [...((await justificadoPorDia([empleadoId], desde, hasta)).get(empleadoId) ?? new Map()).entries()].map(([fecha, j]) => ({ fecha, ...j }));
   const generadoUtc = new Date().toISOString();
   const firma = await firmar(
     JSON.stringify({ u: empleadoId, a: actor.usuarioId, desde, hasta, g: generadoUtc, f: fichajes.map((f) => [f.id, f.tipo, f.fechaHoraUtc, f.ubicacion, f.originalUtc, f.anulado]) })
@@ -105,5 +108,6 @@ export async function datosExportacion(empleadoId: number, desde: string, hasta:
     codigo,
     dias,
     fichajes,
+    justificados,
   };
 }
