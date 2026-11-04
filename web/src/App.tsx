@@ -10,18 +10,20 @@ import Historial from "./pages/Historial";
 import Admin from "./pages/Admin";
 import MiEquipo from "./pages/MiEquipo";
 import Aprobaciones from "./pages/Aprobaciones";
+import Horarios from "./pages/Horarios";
 
 export default function App() {
   const { usuario, cargando, salir } = useSesion();
   const ubicacion = useLocation();
   const [pendientes, setPendientes] = useState(0);
+  const [avisos, setAvisos] = useState(0);
   const supervisa = !!usuario?.tieneEquipo && !usuario?.debeCambiarPassword;
 
   useEffect(() => { setPendientes(usuario?.pendientesAprobacion ?? 0); }, [usuario]);
   // Contador de aprobaciones: se refresca al cambiar de página y cada 2 minutos
   useEffect(() => {
     if (!supervisa) return;
-    const leer = () => api.contadorAprobaciones().then((r) => setPendientes(r.pendientes)).catch(() => {});
+    const leer = () => api.contadorAprobaciones().then((r) => { setPendientes(r.pendientes); setAvisos(r.avisosEquipo ?? 0); }).catch(() => {});
     leer();
     const t = setInterval(leer, 120000);
     return () => clearInterval(t);
@@ -55,6 +57,11 @@ export default function App() {
             <NavLink to="/historial">Mi historial</NavLink>
             {supervisa && <NavLink to="/equipo">Mi equipo</NavLink>}
             {supervisa && (
+              <NavLink to="/horarios" aria-label={avisos ? `Horarios (${avisos} avisos)` : "Horarios"}>
+                Horarios{avisos > 0 && <span className="contador contador-aviso">{avisos > 99 ? "99+" : avisos}</span>}
+              </NavLink>
+            )}
+            {supervisa && (
               <NavLink to="/aprobaciones" aria-label={pendientes ? `Aprobaciones (${pendientes} pendientes)` : "Aprobaciones"}>
                 Aprobaciones{pendientes > 0 && <span className="contador">{pendientes > 99 ? "99+" : pendientes}</span>}
               </NavLink>
@@ -74,6 +81,7 @@ export default function App() {
           <Route path="/historial" element={<Historial />} />
           <Route path="/cuenta" element={<CambiarPassword />} />
           {supervisa && <Route path="/equipo" element={<MiEquipo />} />}
+          {supervisa && <Route path="/horarios" element={<Horarios onAvisos={setAvisos} />} />}
           {supervisa && <Route path="/aprobaciones" element={<Aprobaciones onPendientes={setPendientes} />} />}
           {esAdmin && <Route path="/admin/*" element={<Admin />} />}
           {esAdmin && <Route path="/gestion/*" element={<Navigate to="/admin" replace />} />}

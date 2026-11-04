@@ -391,3 +391,48 @@ textarea:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-co
 .lista-incidencias .btn-link { align-self: flex-start; padding-left: 0; }
 .contador { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: #f5d892; color: #4a3b0c; font-size: 0.75rem; font-weight: 700; text-align: center; line-height: 1.4; }
 .lista-fichajes li.anulado { text-decoration: line-through; opacity: 0.55; }
+
+/* Horarios */
+.contador-aviso { background: #fbeceb; color: var(--rojo); }
+.ahora-cabecera { display: flex; gap: 12px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin: 12px 0; }
+.selector-grupo { min-width: 220px; }
+.avisos-equipo { background: #fbeceb; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+.avisos-equipo h3 { margin: 0 0 6px; font-size: 1rem; color: var(--rojo); }
+.aviso-fila { padding: 6px 0; border-top: 1px solid rgba(181, 70, 60, 0.15); }
+.aviso-fila:first-of-type { border-top: none; }
+.chip-estado-trabajando { background: var(--verde-claro); color: var(--verde-oscuro); }
+.chip-estado-en_pausa { background: #fbf1da; color: #8a6514; }
+.chip-estado-fuera { background: #eceeed; color: var(--texto-suave); }
+.editor-horario .segmentado { flex-wrap: wrap; }
+.semana-horario { border: 1px solid var(--borde); border-radius: 10px; padding: 8px 12px 10px; margin: 6px 0; }
+.semana-horario legend { font-weight: 600; padding: 0 6px; }
+.dia-horario { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px solid var(--borde); }
+.dia-horario:first-of-type { border-top: none; }
+.dia-nombre { font-weight: 600; padding-top: 8px; font-size: 0.9rem; }
+.dia-tramos { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.tramo { display: inline-flex; gap: 4px; align-items: center; }
+.tramo input[type="time"] { padding: 6px 8px; }
+.tramo select { padding: 6px 8px; max-width: 130px; }
+.campo-corto { max-width: 180px; }
+.campo-ancho { flex: 1 1 220px; }
+.fila-acciones { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 6px 0 4px; }
+.ficha-horario h3 { margin: 18px 0 2px; font-size: 1rem; }
+.lista-simple { list-style: none; padding: 0; margin: 6px 0; }
+.lista-simple li { padding: 4px 0; border-top: 1px solid var(--borde); }
+.lista-simple li:first-child { border-top: none; }
+.turnos-centro { margin: 10px 0 14px; }
+.turnos-centro h3 { margin: 0 0 6px; font-size: 0.95rem; }
+.descartados { margin-top: 10px; }
+.descartados summary { cursor: pointer; color: var(--texto-suave); }
+.calendario-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+.lista-calendarios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lista-calendarios button { width: 100%; text-align: left; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font: inherit; }
+.lista-calendarios button.activo { border-color: var(--verde); background: var(--verde-claro); }
+.lista-calendarios small { color: var(--texto-suave); }
+.lista-calendarios .chip { align-self: flex-start; }
+@media (max-width: 760px) {
+  .calendario-layout { grid-template-columns: 1fr; }
+  .dia-horario { grid-template-columns: 1fr; }
+  .dia-nombre { padding-top: 0; }
+}
+.horarios-tarjeta { overflow-x: auto; }

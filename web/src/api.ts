@@ -66,6 +66,7 @@ export interface Centro {
   direccion: string | null; codigoPostal: string | null; ciudad: string | null; telefono: string | null;
   activo: boolean; creadoUtc: string; usuariosActivos: number;
   coordinadorId: number | null; coordinador: string | null; gestorId: number | null; gestor: string | null;
+  comunidad: string | null; margenMinutos: number; escaladoMinutos: number; umbralSobrecargaHoras: number; maxHorasSinSalida: number;
 }
 export interface DatosCentro {
   empresaId: number; codigoServicio: string; nombre: string;
@@ -113,6 +114,45 @@ export interface Incidencia {
   contexto?: FichajeDia[];
 }
 export interface NuevaIncidencia { tipo: TipoIncidencia; fichajeId?: number; tipoFichaje?: TipoFichaje; fecha?: string; hora?: string; comentario: string }
+
+/* ---------- Horarios ---------- */
+export type TipoHorario = "FIJO" | "ROTATIVO" | "VARIABLE";
+export const ETIQUETA_HORARIO: Record<TipoHorario, string> = { FIJO: "Fijo", ROTATIVO: "Rotativo", VARIABLE: "Variable (bolsa de horas)" };
+export interface TramoHorario { semana: number; dia: number; inicio: string; fin: string; turnoId: number | null }
+export interface TramoDia { inicio: string; fin: string }
+export interface Horario {
+  usuarioId: number; tipo: TipoHorario; horasMes: number | null; semanas: number; inicioPatron: string | null;
+  bolsaDesde: string | null; descuentaFestivos: boolean; tramos: TramoHorario[];
+}
+export interface SaldoMes {
+  tipo: TipoHorario | null; objetivoMin: number; objetivoHastaHoyMin: number | null; trabajadoMin: number;
+  ajuste: { horas: number; motivo: string } | null; bolsaAnteriorMin: number | null; pendienteMin: number | null;
+  excesoMin: number; sobrecarga: boolean; umbralHoras: number; centroId: number | null;
+}
+export interface EmpleadoHorario {
+  id: number; nombre: string; apellidos: string; tipoPerfil: TipoPerfil | null; centroId: number | null; centro: string | null;
+  codigoServicio: string | null; departamento: string | null; horario: { tipo: TipoHorario; resumen: string } | null; saldo: SaldoMes | null; propio: boolean;
+}
+export interface DetalleHorario {
+  horario: Horario | null; resumen: string; cambios: { fecha: string; tramos: TramoDia[] }[];
+  ajustes: { mes: string; horas: number; motivo: string; creadoPor: string }[]; editable: boolean;
+}
+export interface Aviso { tipo: "SIN_ENTRADA" | "SIN_SALIDA" | "RETRASO"; prevista: string | null; desdeUtc: string; minutos: number; escalado: boolean; texto: string }
+export interface PresenciaEmpleado {
+  id: number; nombre: string; apellidos: string; centroId: number | null; centro: string | null; codigoServicio: string | null; departamento: string | null;
+  estado: Estado; ultimoUtc: string | null; planHoy: TramoDia[]; avisos: Aviso[];
+}
+export interface Turno { id: number; centroId: number; centro: string; nombre: string; inicio: string; fin: string; activo: boolean; editable: boolean }
+export interface CandidatoCobertura {
+  id: number; nombre: string; apellidos: string; tipo: TipoHorario | null; debeMin: number; bolsaMin: number | null;
+  trabajadoMin: number; objetivoMin: number; excesoMin: number; motivo: string | null;
+}
+export interface Festivo { fecha: string; nombre: string; origen: "NACIONAL" | "AUTONOMICO" | "LOCAL" | "MANUAL"; id?: number }
+export interface FestivoManual { id: number; fecha: string; nombre: string; ambito: "MUNICIPIO" | "COMUNIDAD"; provincia: string | null; municipio: string | null; comunidad: string | null; quitar: boolean }
+export interface CalendarioCentros {
+  comunidad: string | null; provincia: string | null; municipio: string | null; nombreComunidad: string | null; ciudad: string | null;
+  centros: string[]; festivos: Festivo[]; locales: number;
+}
 
 export type EstadoUbicacion = "OK" | "DENEGADA" | "NO_DISPONIBLE" | "TIMEOUT" | "NO_SOPORTADA";
 export interface ResultadoUbicacion {
@@ -184,8 +224,29 @@ export const api = {
   crearIncidencia: (d: NuevaIncidencia) => llamar<{ id: number }>("POST", "incidencias", d),
   retirarIncidencia: (id: number) => llamar("PUT", `incidencias/${id}/retirar`),
   aprobaciones: (estado: "PENDIENTES" | "RESUELTAS") => llamar<{ incidencias: Incidencia[] }>("GET", `aprobaciones?estado=${estado}`),
-  contadorAprobaciones: () => llamar<{ pendientes: number }>("GET", "aprobaciones/contador"),
+  contadorAprobaciones: () => llamar<{ pendientes: number; avisosEquipo: number }>("GET", "aprobaciones/contador"),
   resolverIncidencia: (id: number, accion: "ACEPTAR" | "RECHAZAR", motivo?: string) => llamar("PUT", `aprobaciones/${id}/resolver`, { accion, motivo }),
+
+  horariosEquipo: (mes: string) => llamar<{ mes: string; empleados: EmpleadoHorario[] }>("GET", `horarios/equipo?mes=${mes}`),
+  horarioDetalle: (id: number) => llamar<DetalleHorario>("GET", `horarios/${id}`),
+  guardarHorario: (d: { ids: number[]; tipo: TipoHorario; horasMes?: number; semanas?: number; inicioPatron?: string; descuentaFestivos: boolean; tramos: TramoHorario[] }) =>
+    llamar<{ actualizados: number }>("PUT", "horarios", d),
+  ajusteMes: (id: number, d: { mes: string; horas: number | null; motivo?: string }) => llamar("PUT", `horarios/${id}/ajuste`, d),
+  cambioDia: (id: number, d: { fecha: string; tramos?: TramoDia[]; quitar?: boolean }) => llamar("PUT", `horarios/${id}/cambio`, d),
+  equipoAhora: () => llamar<{ ahoraUtc: string; empleados: PresenciaEmpleado[] }>("GET", "equipo/ahora"),
+  cubrir: (centroId: number, fecha: string, inicio: string, fin: string) =>
+    llamar<{ candidatos: CandidatoCobertura[]; descartados: CandidatoCobertura[]; horasHueco: number }>("GET", `equipo/cubrir?centroId=${centroId}&fecha=${fecha}&inicio=${inicio}&fin=${fin}`),
+  turnos: (centroId?: number) => llamar<{ turnos: Turno[]; centrosEditables: number[] | null }>("GET", `turnos${centroId ? `?centroId=${centroId}` : ""}`),
+  crearTurno: (d: { centroId: number; nombre: string; inicio: string; fin: string }) => llamar<{ id: number }>("POST", "turnos", d),
+  editarTurno: (id: number, d: { nombre: string; inicio: string; fin: string; activo: boolean }) => llamar("PUT", `turnos/${id}`, d),
+  miDia: () => llamar<{ planHoy: TramoDia[]; avisos: Aviso[] }>("GET", "fichajes/mi-dia"),
+  calendarios: (anio: number) =>
+    llamar<{ anio: number; calendarios: CalendarioCentros[]; sinDatos: string[]; manuales: FestivoManual[]; automaticos: Record<string, Festivo[]> }>("GET", `gestion/calendarios?anio=${anio}`),
+  crearFestivo: (d: { fecha: string; nombre?: string; ambito: "MUNICIPIO" | "COMUNIDAD"; provincia?: string | null; municipio?: string | null; comunidad?: string | null; quitar?: boolean }) =>
+    llamar<{ id: number }>("POST", "gestion/festivos", d),
+  borrarFestivo: (id: number) => llamar("DELETE", `gestion/festivos/${id}`),
+  controlCentro: (id: number, d: { margenMinutos: number; escaladoMinutos: number; umbralSobrecargaHoras: number; maxHorasSinSalida: number }) =>
+    llamar("PUT", `gestion/centros/${id}/control`, d),
 
   equipoResumen: (desde: string, hasta: string) =>
     llamar<{ desde: string; hasta: string; empleados: EmpleadoEquipo[]; incidencias: IncidenciaEquipo[] }>("GET", `equipo/resumen?desde=${desde}&hasta=${hasta}`),
@@ -233,6 +294,10 @@ export const restarDias = (yyyyMmDd: string, n: number) => {
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 };
+
+/** Minutos con signo como "+3 h 20 min" / "−1 h 05 min". */
+export const horasConSigno = (min: number) => `${min < 0 ? "−" : min > 0 ? "+" : ""}${duracion(Math.abs(Math.round(min)))}`;
+export const DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"];
 
 export const ETIQUETA_TIPO: Record<TipoFichaje, string> = {
   ENTRADA: "Entrada",
