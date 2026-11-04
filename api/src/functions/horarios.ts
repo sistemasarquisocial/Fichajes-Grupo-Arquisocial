@@ -1,4 +1,5 @@
 import { app } from "@azure/functions";
+import { cargarAusencias } from "../lib/ausencias";
 import { getPool, sql } from "../lib/db";
 import { ipCliente, ROLES_VEN_TODO, UsuarioSesion } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
@@ -353,8 +354,9 @@ app.http("equipoCubrir", {
     const ids = candidatos.map((e) => e.id as number);
     const mes = fecha.slice(0, 7) > mesActual() ? mesActual() : fecha.slice(0, 7);
     const dia = (n: number) => new Date(Date.parse(`${fecha}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
-    const [res, horarios, cambios, params, manuales] = await Promise.all([
+    const [res, horarios, cambios, params, manuales, ausencias] = await Promise.all([
       resumenMes(ids, mes), cargarHorarios(ids), cargarCambios(ids, dia(-1), fecha), cargarParams(ids), cargarFestivosManuales(dia(-1), fecha),
+      cargarAusencias(ids, fecha, fecha, ["PENDIENTE", "APROBADA"]),
     ]);
     const festivos = festivosPorUbicacion(manuales, dia(-1), fecha);
     const ef = await fichajesEfectivos(ids, new Date(hueco.ini.getTime() - 86400000), new Date(hueco.fin.getTime() + 86400000));
@@ -378,9 +380,11 @@ app.http("equipoCubrir", {
         else if (abierto) { trabajados.push({ ini: abierto, fin: f.fechaHoraUtc }); abierto = null; }
       }
       if (abierto) trabajados.push({ ini: abierto, fin: new Date() });
-      const motivo = plan.some(solapa) ? "Ya tiene turno en ese horario" : trabajados.some(solapa) ? "Ya ha trabajado en ese horario" : s.sobrecarga ? `Sobrecargado/a (+${Math.round(s.excesoMin / 60)} h este mes)` : null;
+      // Ausente ese día (ausencia pendiente o aprobada que coincide con el hueco)
+      const ausente = (ausencias.get(e.id) ?? []).some((a) => !a.horaInicio || solapa(intervaloUtc(fecha, { inicio: a.horaInicio, fin: a.horaFin! })!));
+      const motivo = ausente ? "Tiene una ausencia justificada ese día" : plan.some(solapa) ? "Ya tiene turno en ese horario" : trabajados.some(solapa) ? "Ya ha trabajado en ese horario" : s.sobrecarga ? `Sobrecargado/a (+${Math.round(s.excesoMin / 60)} h este mes)` : null;
       // Prioridad: lo que debe (bolsa + pendiente del mes en variables; objetivo hasta hoy - trabajado en el resto)
-      const debe = s.pendienteMin ?? ((s.objetivoHastaHoyMin ?? s.objetivoMin) - s.trabajadoMin);
+      const debe = s.pendienteMin ?? ((s.objetivoHastaHoyMin ?? s.objetivoMin) - s.trabajadoMin - s.justificadoMin);
       return { ...e, tipo: s.tipo, debeMin: debe, bolsaMin: s.bolsaAnteriorMin, trabajadoMin: s.trabajadoMin, objetivoMin: s.objetivoMin, excesoMin: s.excesoMin, motivo };
     });
     const orden = (a: any, b: any) => b.debeMin - a.debeMin;

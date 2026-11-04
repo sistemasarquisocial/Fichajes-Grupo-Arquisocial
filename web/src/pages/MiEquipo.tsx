@@ -218,7 +218,7 @@ export default function MiEquipo() {
                 <thead>
                   <tr>
                     <th className="col-check"><input type="checkbox" aria-label="Seleccionar todos" checked={todosMarcados} onChange={marcarTodos} /></th>
-                    <th>Empleado/a</th><th>Centro / departamento</th><th>Trabajado</th><th>Días</th><th>Incidencias</th><th>Estado</th><th />
+                    <th>Empleado/a</th><th>Centro / departamento</th><th>Trabajado</th><th>Justificado</th><th>Días</th><th>Incidencias</th><th>Estado</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -228,6 +228,7 @@ export default function MiEquipo() {
                       <td><strong>{e.apellidos}, {e.nombre}</strong><div className="nota">{e.tipoPerfil ? ETIQUETA_PERFIL[e.tipoPerfil] : "Sin perfil"}</div></td>
                       <td>{grupoDe(e)}</td>
                       <td className="nowrap"><strong>{duracion(e.minutosTrabajados)}</strong></td>
+                      <td className="nowrap">{e.minutosJustificados ? duracion(e.minutosJustificados) : "—"}</td>
                       <td>{e.diasTrabajados}</td>
                       <td>{e.diasConIncidencia ? <span className="chip chip-salida">{e.diasConIncidencia} día(s)</span> : <span className="nota">—</span>}</td>
                       <td>
@@ -303,6 +304,12 @@ function DetalleModal({ empleado, periodo, onCerrar }: { empleado: { id: number;
   }
 
   const total = (d?.dias ?? []).reduce((s, x) => s + x.minutosTrabajados, 0);
+  const justif = new Map((d?.justificados ?? []).map((j) => [j.fecha, j]));
+  const totalJustif = (d?.justificados ?? []).reduce((s, j) => s + j.minutos, 0);
+  // Una fila por día con fichajes o con horas justificadas
+  const filas = d
+    ? [...new Set([...d.dias.map((x) => x.fecha), ...justif.keys()])].sort((a, b) => (a < b ? 1 : -1)).map((fecha) => ({ fecha, x: d.dias.find((y) => y.fecha === fecha) ?? null, j: justif.get(fecha) ?? null }))
+    : [];
   const hoy = hoyLocal();
 
   return (
@@ -310,7 +317,7 @@ function DetalleModal({ empleado, periodo, onCerrar }: { empleado: { id: number;
       <div className="detalle-cabecera">
         <div>
           {d && <p className="nota">{grupoDe(d.empleado)} · {d.empleado.email}</p>}
-          <p className="nota">Periodo: {fechaCorta(periodo[0])} – {fechaCorta(periodo[1])}{d ? <> · Total trabajado: <strong>{duracion(total)}</strong></> : null}</p>
+          <p className="nota">Periodo: {fechaCorta(periodo[0])} – {fechaCorta(periodo[1])}{d ? <> · Total trabajado: <strong>{duracion(total)}</strong>{totalJustif > 0 && <> · Justificado: <strong>{duracion(totalJustif)}</strong></>}</> : null}</p>
         </div>
         <div className="exportar-botones">
           <button className="btn btn-exportar" onClick={() => exportar("pdf")} disabled={!!generando}><IconoPdf />{generando === "pdf" ? "Generando…" : "PDF"}</button>
@@ -320,19 +327,20 @@ function DetalleModal({ empleado, periodo, onCerrar }: { empleado: { id: number;
       {error && <p className="error" role="alert">{error}</p>}
       {!d && !error ? (
         <div className="centrado-bloque"><div className="spinner" aria-label="Cargando" /></div>
-      ) : d && d.dias.length === 0 ? (
+      ) : d && filas.length === 0 ? (
         <p className="nota vacio">Sin fichajes en el periodo.</p>
       ) : d ? (
         <div className="detalle-tabla">
           <table className="tabla">
-            <thead><tr><th>Día</th><th>Fichajes</th><th>Pausa</th><th>Trabajado</th></tr></thead>
+            <thead><tr><th>Día</th><th>Fichajes</th><th>Pausa</th><th>Trabajado</th><th>Justificado</th></tr></thead>
             <tbody>
-              {d.dias.map((x) => (
-                <tr key={x.fecha}>
-                  <td className="capitalizar nowrap">{fechaLarga(x.fecha)}</td>
+              {filas.map(({ fecha, x, j }) => (
+                <tr key={fecha}>
+                  <td className="capitalizar nowrap">{fechaLarga(fecha)}</td>
                   <td>
                     <div className="chips">
-                      {x.fichajes.map((f, i) => (
+                      {j && <span className="chip chip-ausencia">{j.motivos.join(", ")}</span>}
+                      {x?.fichajes.map((f, i) => (
                         <ChipFichaje
                           key={i}
                           f={f}
@@ -343,11 +351,12 @@ function DetalleModal({ empleado, periodo, onCerrar }: { empleado: { id: number;
                       ))}
                     </div>
                   </td>
-                  <td className="nowrap">{duracion(x.minutosPausa)}</td>
+                  <td className="nowrap">{x ? duracion(x.minutosPausa) : "—"}</td>
                   <td className="nowrap">
-                    <strong>{duracion(x.minutosTrabajados)}</strong>
-                    {x.abierto && <div className={x.fecha === hoy ? "nota" : "error-texto"}>{x.fecha === hoy ? "En curso" : "Sin cerrar"}</div>}
+                    {x ? <strong>{duracion(x.minutosTrabajados)}</strong> : "—"}
+                    {x?.abierto && <div className={x.fecha === hoy ? "nota" : "error-texto"}>{x.fecha === hoy ? "En curso" : "Sin cerrar"}</div>}
                   </td>
+                  <td className="nowrap">{j ? duracion(j.minutos) : "—"}</td>
                 </tr>
               ))}
             </tbody>

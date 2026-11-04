@@ -57,6 +57,8 @@ export interface DatosExportacion {
   codigo: string;
   dias: { fecha: string; minutosTrabajados: number; minutosPausa: number; abierto: boolean }[];
   fichajes: { id: number; tipo: TipoFichaje; fechaHoraUtc: string; ubicacion: string; precision: number | null; corregido?: boolean; originalUtc?: string | null; anadido?: boolean; anulado?: boolean }[];
+  /** Ausencias justificadas aprobadas por día (columna aparte de lo trabajado). */
+  justificados?: Justificado[];
 }
 
 export interface Empresa { id: number; nombre: string }
@@ -88,7 +90,7 @@ export interface MiCadena { aprobador: string | null; suplenteDeMiAprobador: str
 export interface EmpleadoEquipo {
   id: number; nombre: string; apellidos: string; email: string; activo: boolean; tipoPerfil: TipoPerfil | null;
   centroId: number | null; centro: string | null; codigoServicio: string | null; departamentoId: number | null; departamento: string | null;
-  minutosTrabajados: number; minutosPausa: number; diasTrabajados: number; diasConIncidencia: number; enCurso: boolean;
+  minutosTrabajados: number; minutosPausa: number; minutosJustificados: number; diasTrabajados: number; diasConIncidencia: number; enCurso: boolean;
 }
 export interface IncidenciaEquipo {
   empleadoId: number; nombre: string; apellidos: string; centro: string | null; codigoServicio: string | null; departamento: string | null;
@@ -98,6 +100,7 @@ export interface DetalleEmpleado {
   empleado: { id: number; nombre: string; apellidos: string; email: string; activo: boolean; centro: string | null; codigoServicio: string | null; departamento: string | null };
   desde: string; hasta: string;
   dias: { fecha: string; minutosTrabajados: number; minutosPausa: number; abierto: boolean; fichajes: (FichajeDia & { ubicacion: string })[] }[];
+  justificados: Justificado[];
 }
 
 /* ---------- Incidencias ---------- */
@@ -113,6 +116,42 @@ export interface Incidencia {
   /** Fichajes del día afectado (solo en pendientes de aprobación). */
   contexto?: FichajeDia[];
 }
+/* ---------- Ausencias justificadas ---------- */
+export type EstadoAusencia = "PENDIENTE" | "APROBADA" | "RECHAZADA" | "RETIRADA";
+export const ETIQUETA_ESTADO_AUS: Record<EstadoAusencia, string> = { PENDIENTE: "Pendiente", APROBADA: "Aprobada", RECHAZADA: "Rechazada", RETIRADA: "Retirada" };
+export interface MotivoAusencia { id: number; nombre: string; requiereJustificante: boolean }
+export interface MotivoGestion extends MotivoAusencia { orden: number; activo: boolean; usos: number }
+export interface Documento { id: number; nombre: string; tipo: string; bytes: number; subidoUtc: string }
+export interface Ausencia {
+  id: number; usuarioId: number; solicitante: string; centro: string | null; codigoServicio: string | null; departamento: string | null;
+  motivoId: number; motivo: string; requiereJustificante: boolean;
+  fechaInicio: string; fechaFin: string; horaInicio: string | null; horaFin: string | null; comentario: string | null;
+  estado: EstadoAusencia; creadoUtc: string; resueltaPor: string | null; resueltaUtc: string | null; motivoRechazo: string | null;
+  documentos: Documento[];
+}
+export interface AusenciaDia { id: number; motivo: string; estado: EstadoAusencia; fechaInicio: string; fechaFin: string; horaInicio: string | null; horaFin: string | null; periodo: string }
+export interface Justificado { fecha: string; minutos: number; motivos: string[] }
+export interface NuevaAusencia { motivoId: number; fechaInicio: string; fechaFin: string; horaInicio?: string; horaFin?: string; comentario?: string }
+export const DIAS_AUSENCIA = 30;
+const fechaCortaAus = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}`;
+/** "12/11/2026 10:00–12:00", "12/11/2026 (día completo)", "12/11/2026 – 14/11/2026". */
+export const periodoAusencia = (a: Pick<Ausencia, "fechaInicio" | "fechaFin" | "horaInicio" | "horaFin">) =>
+  a.horaInicio ? `${fechaCortaAus(a.fechaInicio)} de ${a.horaInicio} a ${a.horaFin}` : a.fechaInicio === a.fechaFin ? `${fechaCortaAus(a.fechaInicio)} (día completo)` : `${fechaCortaAus(a.fechaInicio)} – ${fechaCortaAus(a.fechaFin)}`;
+
+/** Sube un justificante (cuerpo binario). */
+async function subirArchivo(ruta: string, archivo: Blob, nombre: string): Promise<Documento> {
+  const res = await fetch(`/api/${ruta}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/octet-stream", "X-Requested-With": "fichajes", "X-Nombre-Archivo": encodeURIComponent(nombre) },
+    body: archivo,
+  });
+  let datos: any = null;
+  try { datos = await res.json(); } catch { /* sin cuerpo */ }
+  if (!res.ok) throw new ApiError(res.status, datos?.error ?? (res.status === 413 ? "El archivo no puede superar 10 MB" : `Error ${res.status}`));
+  return datos as Documento;
+}
+
 export interface NuevaIncidencia { tipo: TipoIncidencia; fichajeId?: number; tipoFichaje?: TipoFichaje; fecha?: string; hora?: string; comentario: string }
 
 /* ---------- Horarios ---------- */
@@ -125,7 +164,7 @@ export interface Horario {
   bolsaDesde: string | null; descuentaFestivos: boolean; tramos: TramoHorario[];
 }
 export interface SaldoMes {
-  tipo: TipoHorario | null; objetivoMin: number; objetivoHastaHoyMin: number | null; trabajadoMin: number;
+  tipo: TipoHorario | null; objetivoMin: number; objetivoHastaHoyMin: number | null; trabajadoMin: number; justificadoMin: number;
   ajuste: { horas: number; motivo: string } | null; bolsaAnteriorMin: number | null; pendienteMin: number | null;
   excesoMin: number; sobrecarga: boolean; umbralHoras: number; centroId: number | null;
 }
@@ -218,7 +257,20 @@ export const api = {
   exportar: (desde: string, hasta: string, formato: "pdf" | "xlsx") =>
     llamar<DatosExportacion>("GET", `fichajes/exportar?desde=${desde}&hasta=${hasta}&formato=${formato}`),
   historial: (desde: string, hasta: string) =>
-    llamar<{ desde: string; hasta: string; dias: ResumenDia[] }>("GET", `fichajes/historial?desde=${desde}&hasta=${hasta}`),
+    llamar<{ desde: string; hasta: string; dias: ResumenDia[]; justificados: Justificado[]; ausencias: AusenciaDia[] }>("GET", `fichajes/historial?desde=${desde}&hasta=${hasta}`),
+
+  motivosAusencia: () => llamar<{ motivos: MotivoAusencia[] }>("GET", "ausencias/motivos"),
+  misAusencias: () => llamar<{ resuelve: string; ausencias: Ausencia[]; almacen: boolean }>("GET", "ausencias/mias"),
+  crearAusencia: (d: NuevaAusencia) => llamar<{ id: number }>("POST", "ausencias", d),
+  retirarAusencia: (id: number) => llamar("PUT", `ausencias/${id}/retirar`),
+  subirJustificante: (id: number, archivo: Blob, nombre: string) => subirArchivo(`ausencias/${id}/justificantes`, archivo, nombre),
+  borrarJustificante: (id: number, doc: number) => llamar("DELETE", `ausencias/${id}/justificantes/${doc}`),
+  enlaceDocumento: (id: number) => llamar<{ url: string }>("GET", `documentos/${id}/enlace`),
+  aprobacionesAusencias: (estado: "PENDIENTES" | "RESUELTAS") => llamar<{ ausencias: Ausencia[] }>("GET", `aprobaciones/ausencias?estado=${estado}`),
+  resolverAusencia: (id: number, accion: "ACEPTAR" | "RECHAZAR", motivo?: string) => llamar("PUT", `aprobaciones/ausencias/${id}/resolver`, { accion, motivo }),
+  motivosGestion: () => llamar<{ motivos: MotivoGestion[] }>("GET", "gestion/motivos-ausencia"),
+  crearMotivo: (d: { nombre: string; requiereJustificante: boolean; orden: number }) => llamar<{ id: number }>("POST", "gestion/motivos-ausencia", d),
+  editarMotivo: (id: number, d: { nombre: string; requiereJustificante: boolean; orden: number; activo: boolean }) => llamar("PUT", `gestion/motivos-ausencia/${id}`, d),
 
   misIncidencias: () => llamar<{ resuelve: string; incidencias: Incidencia[] }>("GET", "incidencias/mias"),
   crearIncidencia: (d: NuevaIncidencia) => llamar<{ id: number }>("POST", "incidencias", d),

@@ -436,3 +436,17 @@ textarea:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-co
   .dia-nombre { padding-top: 0; }
 }
 .horarios-tarjeta { overflow-x: auto; }
+
+/* Ausencias justificadas */
+.chip-ausencia { background: #e8eef6; color: #2f4f73; }
+.menu-opciones { display: flex; flex-direction: column; gap: 8px; }
+.menu-opciones .opcion { display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 12px 14px; cursor: pointer; }
+.menu-opciones .opcion:hover, .menu-opciones .opcion:focus-visible { border-color: var(--verde); background: var(--verde-claro); outline: none; }
+.documentos { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 4px 0; }
+.documento { display: inline-flex; gap: 6px; align-items: center; }
+.elegir-archivos { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 4px; }
+.etiqueta-campo { font-weight: 600; font-size: 0.9rem; }
+.inc-acciones-enlaces { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.subir-justificante { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.aviso-justificante { color: var(--rojo); font-size: 0.85rem; }
+.apartado { font-size: 1rem; margin: 14px 0 4px; }

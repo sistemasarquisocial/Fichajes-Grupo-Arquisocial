@@ -41,13 +41,17 @@ export function quienResuelve(org: Org, solicitanteId: number): string {
   return a.efectivo !== a.titular ? `${n(a.efectivo)} (suplente de ${n(a.titular)})` : n(a.titular) ?? "—";
 }
 
+/** Incidencias y ausencias pendientes que resuelve el actor (contador del menú Aprobaciones). */
 export async function contarPendientes(org: Org, actor: UsuarioSesion): Promise<number> {
   const ids = solicitantesDe(org, actor);
   if (!ids.length) return 0;
   const r = await (await getPool())
     .request()
     .input("ids", sql.NVarChar(sql.MAX), ids.join(","))
-    .query("SELECT COUNT(*) AS n FROM fich.Incidencias WHERE Estado = 'PENDIENTE' AND UsuarioId IN (SELECT CAST(value AS INT) FROM STRING_SPLIT(@ids, ','))");
+    .query(
+      `SELECT (SELECT COUNT(*) FROM fich.Incidencias WHERE Estado = 'PENDIENTE' AND UsuarioId IN (SELECT CAST(value AS INT) FROM STRING_SPLIT(@ids, ',')))
+            + (SELECT COUNT(*) FROM fich.Ausencias WHERE Estado = 'PENDIENTE' AND UsuarioId IN (SELECT CAST(value AS INT) FROM STRING_SPLIT(@ids, ','))) AS n`
+    );
   return r.recordset[0].n as number;
 }
 

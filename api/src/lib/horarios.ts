@@ -3,6 +3,7 @@ import { fechaLocal, resumirPorDia, estadoTras, Estado, TipoFichaje } from "./jo
 import { FichajeEfectivo, fichajesEfectivos, localAUtc } from "./correcciones";
 import { Ubicacion, ubicacionDeCentro, cargarFestivosManuales, festivosDe, FestivoManual } from "./calendario";
 import { Org, directosDe } from "./organizacion";
+import { Ausencia, cargarAusencias, minutosDia, restarAusencias } from "./ausencias";
 
 /* Horario de cada trabajador:
    - FIJO: una semana tipo. ROTATIVO: patrón de N semanas que se repite desde InicioPatron.
@@ -282,9 +283,55 @@ export function festivosPorUbicacion(manuales: FestivoManual[], desde: string, h
   };
 }
 
+/** Días laborables del mes (lunes a viernes que no son festivo): reparten las horas al mes de un horario variable. */
+export const laborablesMes = (mes: string, festivos: Set<string>) => diasDelMes(mes).filter((f) => diaSemana(f) <= 5 && !festivos.has(f)).length;
+
+export interface Justificado { minutos: number; motivos: string[] }
+
+/**
+ * Minutos justificados por ausencias APROBADAS, por usuario y día, entre dos fechas (YYYY-MM-DD).
+ * Un día completo cuenta como un día trabajado: horas de su horario ese día (fijo/rotativo)
+ * o sus horas del mes / días laborables del mes (variable).
+ */
+export async function justificadoPorDia(ids: number[], desde: string, hasta: string): Promise<Map<number, Map<string, Justificado>>> {
+  const r = new Map<number, Map<string, Justificado>>();
+  if (!ids.length || desde > hasta) return r;
+  const aus = await cargarAusencias(ids, desde, hasta, ["APROBADA"]);
+  const conAus = ids.filter((id) => aus.has(id));
+  if (!conAus.length) return r;
+  // Meses completos: hacen falta para contar los días laborables de cada mes
+  const iniMes = `${desde.slice(0, 7)}-01`;
+  const finMes = diasDelMes(hasta.slice(0, 7)).slice(-1)[0];
+  const [horarios, cambios, params, manuales] = await Promise.all([
+    cargarHorarios(conAus), cargarCambios(conAus, iniMes, finMes), cargarParams(conAus), cargarFestivosManuales(iniMes, finMes),
+  ]);
+  const festivos = festivosPorUbicacion(manuales, iniMes, finMes);
+  for (const id of conAus) {
+    const h = horarios.get(id);
+    const fs = festivos((params.get(id) ?? PARAMS_DEFECTO).ubicacion);
+    const cm = cambios.get(id) ?? new Map<string, TramoDia[]>();
+    const lista = aus.get(id)!;
+    const m = new Map<string, Justificado>();
+    for (let f = desde; f <= hasta; f = sumarDias(f, 1)) {
+      const del = lista.filter((a) => f >= a.fechaInicio && f <= a.fechaFin);
+      if (!del.length) continue;
+      const diaVariable = h?.tipo === "VARIABLE" ? Math.round(((h.horasMes ?? 0) * 60) / Math.max(1, laborablesMes(f.slice(0, 7), fs))) : null;
+      const laborable = diaSemana(f) <= 5 && !fs.has(f);
+      m.set(f, { minutos: minutosDia(del, f, planDia(h, f, cm, fs), diaVariable, laborable), motivos: [...new Set(del.map((a) => a.motivo))] });
+    }
+    if (m.size) r.set(id, m);
+  }
+  return r;
+}
+
+const totalMes = (m: Map<string, Justificado> | undefined, mes: string) =>
+  [...(m ?? new Map<string, Justificado>()).entries()].filter(([f]) => f.startsWith(mes)).reduce((s, [, j]) => s + j.minutos, 0);
+
 /* ---------- resumen mensual de un grupo de usuarios ---------- */
 export interface ResumenMes {
   usuarioId: number; tipo: TipoHorario | null; objetivoMin: number; objetivoHastaHoyMin: number | null; trabajadoMin: number;
+  /** Horas justificadas por ausencias aprobadas: cuentan como cumplidas en el saldo y en la bolsa. */
+  justificadoMin: number;
   ajuste: { horas: number; motivo: string } | null; bolsaAnteriorMin: number | null; pendienteMin: number | null;
   excesoMin: number; sobrecarga: boolean; umbralHoras: number; centroId: number | null;
 }
@@ -322,7 +369,8 @@ async function bolsaAntesDe(ids: number[], horarios: Map<number, Horario>, mes: 
       const ajuste = (await cargarAjustes([id], [m])).get(`${id}|${m}`) ?? null;
       const objetivo = objetivoMes(h, m, new Map(), new Set(), ajuste?.horas ?? null).total;
       const trabajado = trabajadoMes(ef, m, new Date(Date.parse(`${fin}T00:00:00Z`)));
-      bolsa = bolsaTrasMes(bolsa, objetivo, trabajado);
+      const justificado = totalMes((await justificadoPorDia([id], ini, diasDelMes(m).slice(-1)[0])).get(id), m);
+      bolsa = bolsaTrasMes(bolsa, objetivo, trabajado + justificado);
       await pool
         .request()
         .input("u", sql.Int, id)
@@ -353,18 +401,20 @@ export async function resumenMes(ids: number[], mes: string, ahora = new Date())
   const festivos = festivosPorUbicacion(manuales, ini, fin);
   const ef = await fichajesEfectivos(ids, new Date(Date.parse(`${ini}T00:00:00Z`) - DIA), new Date(Date.parse(`${fin}T00:00:00Z`) + 2 * DIA));
   const bolsas = await bolsaAntesDe(ids, horarios, mes);
+  const justificados = await justificadoPorDia(ids, ini, fin);
   for (const id of ids) {
     const h = horarios.get(id);
     const p = params.get(id) ?? { centroId: null, ...PARAMS_DEFECTO };
     const ajuste = ajustes.get(`${id}|${mes}`) ?? null;
     const obj = objetivoMes(h, mes, cambios.get(id) ?? new Map(), festivos(p.ubicacion), ajuste?.horas ?? null, hoy < fin ? hoy : fin);
     const trabajado = trabajadoMes(ef.get(id) ?? [], mes, ahora);
+    const justificado = totalMes(justificados.get(id), mes);
     const bolsaAnterior = h?.tipo === "VARIABLE" ? bolsas.get(id) ?? 0 : null;
-    const pendiente = h?.tipo === "VARIABLE" ? (bolsaAnterior ?? 0) + obj.total - trabajado : null;
-    const exceso = h ? trabajado - obj.total : 0;
+    const pendiente = h?.tipo === "VARIABLE" ? (bolsaAnterior ?? 0) + obj.total - trabajado - justificado : null;
+    const exceso = h ? trabajado + justificado - obj.total : 0;
     r.set(id, {
       usuarioId: id, tipo: h?.tipo ?? null, objetivoMin: obj.total, objetivoHastaHoyMin: obj.hastaFecha, trabajadoMin: trabajado,
-      ajuste, bolsaAnteriorMin: bolsaAnterior, pendienteMin: pendiente, excesoMin: exceso,
+      justificadoMin: justificado, ajuste, bolsaAnteriorMin: bolsaAnterior, pendienteMin: pendiente, excesoMin: exceso,
       sobrecarga: !!h && exceso > p.umbral * 60, umbralHoras: p.umbral, centroId: p.centroId,
     });
   }
@@ -377,7 +427,11 @@ export async function estadoAhora(ids: number[], ahora = new Date()) {
   if (!ids.length) return r;
   const hoy = fechaLocal(ahora, TZ());
   const ayer = sumarDias(hoy, -1);
-  const [horarios, cambios, params, manuales] = await Promise.all([cargarHorarios(ids), cargarCambios(ids, ayer, hoy), cargarParams(ids), cargarFestivosManuales(ayer, hoy)]);
+  const [horarios, cambios, params, manuales, ausencias] = await Promise.all([
+    cargarHorarios(ids), cargarCambios(ids, ayer, hoy), cargarParams(ids), cargarFestivosManuales(ayer, hoy),
+    // Las ausencias pendientes o aprobadas silencian los avisos de esas horas
+    cargarAusencias(ids, ayer, hoy, ["PENDIENTE", "APROBADA"]),
+  ]);
   const festivos = festivosPorUbicacion(manuales, ayer, hoy);
   const ef = await fichajesEfectivos(ids, new Date(ahora.getTime() - 2 * DIA), new Date(ahora.getTime() + 60000));
   for (const id of ids) {
@@ -387,7 +441,9 @@ export async function estadoAhora(ids: number[], ahora = new Date()) {
     const cm = cambios.get(id) ?? new Map();
     const planAyer = planDia(h, ayer, cm, fs);
     const planHoy = planDia(h, hoy, cm, fs);
-    const tramos = [...planAyer.map((t) => ({ fecha: ayer, t })), ...planHoy.map((t) => ({ fecha: hoy, t }))];
+    const aus: Ausencia[] = ausencias.get(id) ?? [];
+    const sinAusencias = (fecha: string, plan: TramoDia[]) => plan.flatMap((t) => restarAusencias(fecha, t, aus)).map((t) => ({ fecha, t }));
+    const tramos = [...sinAusencias(ayer, planAyer), ...sinAusencias(hoy, planHoy)];
     const lista = ef.get(id) ?? [];
     const vivos = lista.filter((f) => !f.anulado && f.fechaHoraUtc <= ahora);
     const ultimo = vivos[vivos.length - 1];

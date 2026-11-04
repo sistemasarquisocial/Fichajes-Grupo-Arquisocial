@@ -6,6 +6,7 @@ import { auditar } from "../lib/auditoria";
 import { idsVisibles, puedeVerEmpleado } from "../lib/organizacion";
 import { errorPeriodo, limitesConsulta, datosExportacion, TZ } from "../lib/exportacion";
 import { resumirPorDia, fechaLocal } from "../lib/jornada";
+import { justificadoPorDia } from "../lib/horarios";
 import { fichajesEfectivos } from "../lib/correcciones";
 
 /* "Mi equipo": cada aprobador ve a sus directos (y a los del titular al que suple); RRHH y ADMIN ven a todos.
@@ -51,6 +52,7 @@ app.http("equipoResumen", {
 
       const { ini, fin } = limitesConsulta(desde, hasta);
       const porUsuario = await fichajesEfectivos(ids, ini, fin);
+      const justificados = await justificadoPorDia(emp.recordset.map((e: any) => e.id as number), desde, hasta);
 
       const hoy = fechaLocal(new Date(), TZ());
       const incidencias: any[] = [];
@@ -80,6 +82,7 @@ app.http("equipoResumen", {
           activo: !!e.activo,
           minutosTrabajados: dias.reduce((s, d) => s + d.minutosTrabajados, 0),
           minutosPausa: dias.reduce((s, d) => s + d.minutosPausa, 0),
+          minutosJustificados: [...(justificados.get(e.id)?.values() ?? [])].reduce((s, j) => s + j.minutos, 0),
           diasTrabajados: dias.filter((d) => d.minutosTrabajados > 0).length,
           diasConIncidencia: diasIncidencia.size,
           enCurso: dias.some((d) => d.abierto && d.fecha === hoy),
@@ -145,7 +148,8 @@ app.http("equipoDetalle", {
       if (id !== u.usuarioId) {
         await auditar(u.usuarioId, "CONSULTAR_FICHAJES", "Usuario", id, `${desde}..${hasta}`, ipCliente(req));
       }
-      return json(200, { empleado: { ...emp.recordset[0], activo: !!emp.recordset[0].activo }, desde, hasta, dias });
+      const justificados = [...((await justificadoPorDia([id], desde, hasta)).get(id) ?? new Map()).entries()].map(([fecha, j]) => ({ fecha, ...j }));
+      return json(200, { empleado: { ...emp.recordset[0], activo: !!emp.recordset[0].activo }, desde, hasta, dias, justificados });
     },
     {}
   ),
