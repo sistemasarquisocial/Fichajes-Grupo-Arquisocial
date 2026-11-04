@@ -5,6 +5,7 @@ import GestionCentros from "./GestionCentros";
 import GestionDepartamentos from "./GestionDepartamentos";
 import GestionSuplencias from "./GestionSuplencias";
 import GestionFestivos from "./GestionFestivos";
+import GestionMotivos from "./GestionMotivos";
 
 const IconoUsuarios = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -41,6 +42,12 @@ const IconoCalendario = () => (
   </svg>
 );
 
+const IconoMotivos = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" d="M7 3.5h7.5L19 8v12.5H7V3.5ZM14.5 3.5V8H19M10 12.5h6M10 16h6" />
+  </svg>
+);
+
 /** Panel de administración (solo ADMIN): usuarios, departamentos, centros, empresas y suplencias. */
 export default function Admin() {
   return (
@@ -71,6 +78,10 @@ export default function Admin() {
             <IconoCalendario />
             <span><strong>Calendario laboral</strong><small>Festivos por comunidad y municipio</small></span>
           </NavLink>
+          <NavLink to="motivos">
+            <IconoMotivos />
+            <span><strong>Motivos de ausencia</strong><small>Permisos y si exigen justificante</small></span>
+          </NavLink>
           <NavLink to="suplencias">
             <IconoSuplencias />
             <span><strong>Suplencias</strong><small>Sustitutos de aprobadores ausentes</small></span>
@@ -84,6 +95,7 @@ export default function Admin() {
             <Route path="centros" element={<GestionCentros />} />
             <Route path="empresas" element={<GestionEmpresas />} />
             <Route path="calendario" element={<GestionFestivos />} />
+            <Route path="motivos" element={<GestionMotivos />} />
             <Route path="suplencias" element={<GestionSuplencias />} />
             <Route path="*" element={<Navigate to="usuarios" replace />} />
           </Routes>

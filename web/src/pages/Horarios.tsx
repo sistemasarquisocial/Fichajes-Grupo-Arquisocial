@@ -213,11 +213,11 @@ function HorariosBolsa({ grupo, setGrupo, filtro, onCentros }: { grupo: string; 
                   <td><strong>{e.nombre} {e.apellidos}</strong><div className="nota">{grupoDe(e)}</div></td>
                   <td>{e.horario ? e.horario.resumen : <span className="chip chip-pausa_inicio">Sin horario</span>}</td>
                   <td className="nowrap">{s && e.horario ? <>{duracion(s.objetivoMin)}{s.ajuste && <div className="nota" title={s.ajuste.motivo}>ajustado</div>}</> : "—"}</td>
-                  <td className="nowrap">{s ? duracion(s.trabajadoMin) : "—"}</td>
+                  <td className="nowrap">{s ? duracion(s.trabajadoMin) : "—"}{s && s.justificadoMin > 0 && <div className="nota">+ {duracion(s.justificadoMin)} justificado</div>}</td>
                   <td className="nowrap">
                     {s && e.horario && s.tipo !== "VARIABLE" ? (
                       <>
-                        <span className={s.trabajadoMin - refObj < 0 ? "error-texto" : ""}>{horasConSigno(s.trabajadoMin - refObj)}</span>
+                        <span className={s.trabajadoMin + s.justificadoMin - refObj < 0 ? "error-texto" : ""}>{horasConSigno(s.trabajadoMin + s.justificadoMin - refObj)}</span>
                         {s.objetivoHastaHoyMin !== null && mes === mesActual() && <div className="nota">hasta hoy</div>}
                         {s.sobrecarga && <div><span className="chip chip-salida" title={`Más de ${s.umbralHoras} h por encima`}>Sobrecarga</span></div>}
                       </>
