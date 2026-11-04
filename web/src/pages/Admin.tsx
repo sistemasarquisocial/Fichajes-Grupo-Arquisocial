@@ -4,6 +4,7 @@ import GestionEmpresas from "./GestionEmpresas";
 import GestionCentros from "./GestionCentros";
 import GestionDepartamentos from "./GestionDepartamentos";
 import GestionSuplencias from "./GestionSuplencias";
+import GestionFestivos from "./GestionFestivos";
 
 const IconoUsuarios = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -34,6 +35,12 @@ const IconoSuplencias = () => (
   </svg>
 );
 
+const IconoCalendario = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-12ZM4 10h16M8 3v4M16 3v4M9 14h.01M12 14h.01M15 14h.01" />
+  </svg>
+);
+
 /** Panel de administración (solo ADMIN): usuarios, departamentos, centros, empresas y suplencias. */
 export default function Admin() {
   return (
@@ -60,6 +67,10 @@ export default function Admin() {
             <IconoEmpresas />
             <span><strong>Gestión de empresas</strong><small>Alta, edición y desactivación</small></span>
           </NavLink>
+          <NavLink to="calendario">
+            <IconoCalendario />
+            <span><strong>Calendario laboral</strong><small>Festivos por comunidad y municipio</small></span>
+          </NavLink>
           <NavLink to="suplencias">
             <IconoSuplencias />
             <span><strong>Suplencias</strong><small>Sustitutos de aprobadores ausentes</small></span>
@@ -72,6 +83,7 @@ export default function Admin() {
             <Route path="departamentos" element={<GestionDepartamentos />} />
             <Route path="centros" element={<GestionCentros />} />
             <Route path="empresas" element={<GestionEmpresas />} />
+            <Route path="calendario" element={<GestionFestivos />} />
             <Route path="suplencias" element={<GestionSuplencias />} />
             <Route path="*" element={<Navigate to="usuarios" replace />} />
           </Routes>

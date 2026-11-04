@@ -33,7 +33,8 @@ async function validarPerfil(pool: sql.ConnectionPool, b: any, empresaId: number
   const tipo = b.tipoPerfil === "ESTRUCTURA" || b.tipoPerfil === "DELEGACION" ? (b.tipoPerfil as TipoPerfil) : null;
   const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
   let departamentoId = tipo === "ESTRUCTURA" ? num(b.departamentoId) : null;
-  let centroId = tipo === "DELEGACION" ? num(b.centroId) : tipo === null ? num(b.centroId) : null;
+  // Estructura también puede tener centro (sede): solo para calendario y parámetros de control; le aprueba su departamento
+  let centroId = num(b.centroId);
   const managerId = tipo === "ESTRUCTURA" ? num(b.managerId) : null;
   if (tipo === "DELEGACION" && !centroId) return { error: "Un perfil de delegación debe tener centro" };
   if (departamentoId !== null) {

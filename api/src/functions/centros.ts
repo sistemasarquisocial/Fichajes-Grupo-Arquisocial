@@ -3,6 +3,7 @@ import { getPool, sql } from "../lib/db";
 import { ipCliente, Rol } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
+import { comunidadDeCP, NOMBRE_COMUNIDAD } from "../lib/calendario";
 
 /* Centros de trabajo (solo ADMIN).
    - Listar, crear, editar, activar-desactivar.
@@ -84,13 +85,18 @@ app.http("gestionCentrosListar", {
                 c.Activo AS activo, c.CreadoUtc AS creadoUtc,
                 c.CoordinadorId AS coordinadorId, CASE WHEN co.UsuarioId IS NULL THEN NULL ELSE co.Nombre + N' ' + co.Apellidos END AS coordinador,
                 c.GestorId AS gestorId, CASE WHEN g.UsuarioId IS NULL THEN NULL ELSE g.Nombre + N' ' + g.Apellidos END AS gestor,
+                c.MargenMinutos AS margenMinutos, c.EscaladoMinutos AS escaladoMinutos, c.UmbralSobrecargaHoras AS umbralSobrecargaHoras,
+                c.MaxHorasSinSalida AS maxHorasSinSalida,
                 (SELECT COUNT(*) FROM fich.Usuarios u WHERE u.CentroId = c.CentroId AND u.Activo = 1) AS usuariosActivos
            FROM fich.Centros c JOIN fich.Empresas e ON e.EmpresaId = c.EmpresaId
            LEFT JOIN fich.Usuarios co ON co.UsuarioId = c.CoordinadorId
            LEFT JOIN fich.Usuarios g ON g.UsuarioId = c.GestorId
           ORDER BY c.Activo DESC, e.Nombre, c.Nombre`
       );
-      return json(200, r.recordset.map((x: any) => ({ ...x, activo: !!x.activo })));
+      return json(200, r.recordset.map((x: any) => {
+        const cm = comunidadDeCP(x.codigoPostal);
+        return { ...x, activo: !!x.activo, comunidad: cm ? NOMBRE_COMUNIDAD[cm] : null };
+      }));
     },
     { roles: GESTORES }
   ),
@@ -228,6 +234,39 @@ app.http("gestionCentrosResponsables", {
         `antes: coordinador=${actual.CoordinadorId ?? "-"} gestor=${actual.GestorId ?? "-"} | despues: coordinador=${coordinadorId ?? "-"} gestor=${gestorId ?? "-"}`,
         ipCliente(req)
       );
+      return json(200, { ok: true });
+    },
+    { roles: ["ADMIN"] }
+  ),
+});
+
+/* ---------- Parámetros de control horario del centro ---------- */
+app.http("gestionCentrosControl", {
+  methods: ["PUT"],
+  authLevel: "anonymous",
+  route: "gestion/centros/{id:int}/control",
+  handler: conSesion(
+    async (req, _ctx, actor) => {
+      const id = Number(req.params.id);
+      const b = await leerJson(req);
+      const n = (v: unknown) => Number(v);
+      const margen = n(b?.margenMinutos), escalado = n(b?.escaladoMinutos), umbral = n(b?.umbralSobrecargaHoras), maxSin = n(b?.maxHorasSinSalida);
+      if (![margen, escalado, umbral, maxSin].every(Number.isInteger)) return error(400, "Los valores deben ser números enteros");
+      if (margen < 0 || margen > 240) return error(400, "El margen de cortesía debe estar entre 0 y 240 minutos");
+      if (escalado < 0 || escalado > 480) return error(400, "El escalado debe estar entre 0 y 480 minutos");
+      if (umbral < 0 || umbral > 200) return error(400, "El umbral de sobrecarga debe estar entre 0 y 200 horas");
+      if (maxSin < 1 || maxSin > 24) return error(400, "Las horas sin fichar salida deben estar entre 1 y 24");
+      const pool = await getPool();
+      const r = await pool
+        .request()
+        .input("id", sql.Int, id)
+        .input("m", sql.Int, margen)
+        .input("e", sql.Int, escalado)
+        .input("u", sql.Int, umbral)
+        .input("x", sql.Int, maxSin)
+        .query("UPDATE fich.Centros SET MargenMinutos = @m, EscaladoMinutos = @e, UmbralSobrecargaHoras = @u, MaxHorasSinSalida = @x WHERE CentroId = @id");
+      if (!r.rowsAffected[0]) return error(404, "Centro no encontrado");
+      await auditar(actor.usuarioId, "EDITAR_CONTROL_CENTRO", "Centro", id, `margen=${margen} escalado=${escalado} umbral=${umbral}h sinSalida=${maxSin}h`, ipCliente(req));
       return json(200, { ok: true });
     },
     { roles: ["ADMIN"] }

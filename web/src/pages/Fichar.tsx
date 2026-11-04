@@ -1,6 +1,6 @@
 import { notaCorreccion } from "../components/ChipFichaje";
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, EstadoFichaje, TipoFichaje, hora, duracion, ETIQUETA_TIPO, obtenerUbicacion, TEXTO_UBICACION } from "../api";
+import { api, ApiError, EstadoFichaje, TipoFichaje, Aviso, TramoDia, hora, duracion, ETIQUETA_TIPO, obtenerUbicacion, TEXTO_UBICACION } from "../api";
 import { useSesion } from "../sesion";
 
 const TEXTO_ESTADO = { FUERA: "Fuera de jornada", TRABAJANDO: "Trabajando", EN_PAUSA: "En pausa" } as const;
@@ -19,10 +19,12 @@ export default function Fichar() {
   const [enviando, setEnviando] = useState(false);
   const [paso, setPaso] = useState("");
   const [ahora, setAhora] = useState(new Date());
+  const [dia, setDia] = useState<{ planHoy: TramoDia[]; avisos: Aviso[] } | null>(null);
 
   const cargar = useCallback(async () => {
     try {
       setDatos(await api.estado());
+      api.miDia().then(setDia).catch(() => setDia(null));
       setError("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el estado");
@@ -67,6 +69,10 @@ export default function Fichar() {
         <p className="hora-actual">{ahora.toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid" })}</p>
         <p className="fecha-actual">{ahora.toLocaleDateString("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
         <span className={`estado estado-${datos.estado.toLowerCase()}`}>{TEXTO_ESTADO[datos.estado]}</span>
+        {dia && dia.planHoy.length > 0 && <p className="nota">Tu horario hoy: {dia.planHoy.map((t) => `${t.inicio}–${t.fin}`).join(" · ")}</p>}
+        {dia?.avisos.map((a, i) => (
+          <p key={i} className="aviso" role="alert">{a.texto.replace("No ha fichado", "No has fichado").replace("Lleva más", "Llevas más").replace("(entró", "(entraste")}. Si se te olvidó, ficha ahora o abre una incidencia en Mi historial.</p>
+        ))}
         {datos.ultimo && <p className="nota">Último: {ETIQUETA_TIPO[datos.ultimo.tipo]} a las {hora(datos.ultimo.fechaHoraUtc)}</p>}
 
         <div className="acciones">

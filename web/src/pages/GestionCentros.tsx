@@ -43,6 +43,7 @@ export default function GestionCentros() {
   const [editando, setEditando] = useState<Centro | null>(null);
   const [confirmarEstado, setConfirmarEstado] = useState<Centro | null>(null);
   const [responsables, setResponsables] = useState<Centro | null>(null);
+  const [control, setControl] = useState<Centro | null>(null);
 
   async function cargar() {
     try {
@@ -115,6 +116,7 @@ export default function GestionCentros() {
                       <td className="acciones-fila">
                         <button className="btn-link" onClick={() => { setMensaje(null); setEditando(c); }}>Editar</button>
                         <button className="btn-link" onClick={() => { setMensaje(null); setResponsables(c); }}>Coordinador y gestor</button>
+                        <button className="btn-link" onClick={() => { setMensaje(null); setControl(c); }}>Control horario</button>
                         <button className="btn-link" onClick={() => setConfirmarEstado(c)}>{c.activo ? "Desactivar" : "Activar"}</button>
                       </td>
                     </tr>
@@ -148,6 +150,18 @@ export default function GestionCentros() {
           onGuardado={async () => {
             setEditando(null);
             setMensaje({ tipo: "exito", texto: "Centro actualizado." });
+            await cargar();
+          }}
+        />
+      )}
+
+      {control && (
+        <ControlCentro
+          centro={control}
+          onCerrar={() => setControl(null)}
+          onGuardado={async () => {
+            setMensaje({ tipo: "exito", texto: `Control horario de «${control.nombre}» actualizado.` });
+            setControl(null);
             await cargar();
           }}
         />
@@ -403,6 +417,58 @@ function ResponsablesCentro({ centro, onCerrar, onGuardado }: { centro: Centro; 
           </div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+/* ---------- Parámetros de control horario del centro ---------- */
+function ControlCentro({ centro, onCerrar, onGuardado }: { centro: Centro; onCerrar: () => void; onGuardado: () => void }) {
+  const [f, setF] = useState({
+    margenMinutos: String(centro.margenMinutos), escaladoMinutos: String(centro.escaladoMinutos),
+    umbralSobrecargaHoras: String(centro.umbralSobrecargaHoras), maxHorasSinSalida: String(centro.maxHorasSinSalida),
+  });
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    const d = { margenMinutos: Number(f.margenMinutos), escaladoMinutos: Number(f.escaladoMinutos), umbralSobrecargaHoras: Number(f.umbralSobrecargaHoras), maxHorasSinSalida: Number(f.maxHorasSinSalida) };
+    if (!Object.values(d).every(Number.isInteger)) return setError("Usa números enteros.");
+    setGuardando(true);
+    try {
+      await api.controlCentro(centro.id, d);
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar");
+      setGuardando(false);
+    }
+  }
+  const campo = (k: keyof typeof f, etiqueta: string, ayuda: string) => (
+    <label>
+      {etiqueta}
+      <input inputMode="numeric" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+      <small className="nota">{ayuda}</small>
+    </label>
+  );
+  return (
+    <Modal titulo={`Control horario · ${centro.codigoServicio ? `${centro.codigoServicio} · ` : ""}${centro.nombre}`} onCerrar={onCerrar} ancho>
+      <form onSubmit={guardar} className="form-modal">
+        <p className="nota">
+          Calendario: {centro.comunidad ?? "sin comunidad (falta código postal)"}{centro.ciudad ? ` · ${centro.ciudad}` : " · sin ciudad"}. Los festivos se gestionan en Calendario laboral.
+        </p>
+        <div className="fila">
+          {campo("margenMinutos", "Margen de cortesía (min)", "Tiempo tras la hora prevista antes de avisar de falta de fichaje o retraso.")}
+          {campo("escaladoMinutos", "Escalado al aprobador (min)", "Si la persona no ficha tras el aviso, pasado este tiempo se avisa a su aprobador.")}
+        </div>
+        <div className="fila">
+          {campo("umbralSobrecargaHoras", "Umbral de sobrecarga (h/mes)", "Horas por encima de sus horas del mes a partir de las que se marca sobrecarga.")}
+          {campo("maxHorasSinSalida", "Aviso de salida sin fichar (h)", "Para horario variable: horas seguidas dentro sin fichar la salida.")}
+        </div>
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="modal-acciones">
+          <button type="button" className="btn btn-secundario" onClick={onCerrar}>Cancelar</button>
+          <button className="btn btn-primario" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button>
+        </div>
+      </form>
     </Modal>
   );
 }
