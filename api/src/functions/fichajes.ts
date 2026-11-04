@@ -5,6 +5,8 @@ import { errorPeriodo, datosExportacion } from "../lib/exportacion";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { estadoTras, accionesPermitidas, resumirPorDia, fechaLocal, TipoFichaje } from "../lib/jornada";
 import { fichajesEfectivos, ultimoEfectivo } from "../lib/correcciones";
+import { justificadoPorDia } from "../lib/horarios";
+import { cargarAusencias, textoPeriodo } from "../lib/ausencias";
 
 const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 const TIPOS: TipoFichaje[] = ["ENTRADA", "SALIDA", "PAUSA_INICIO", "PAUSA_FIN"];
@@ -124,7 +126,12 @@ app.http("historial", {
     const fHasta = dHasta.toISOString().slice(0, 10);
     const dias = resumirPorDia(lista, TZ()).filter((d) => d.fecha >= fDesde && d.fecha <= fHasta);
 
-    return json(200, { desde: fDesde, hasta: fHasta, dias });
+    // Ausencias justificadas: las aprobadas cuentan como "Justificado"; las pendientes se muestran como pendientes
+    const justificados = [...((await justificadoPorDia([u.usuarioId], fDesde, fHasta)).get(u.usuarioId) ?? new Map()).entries()].map(([fecha, j]) => ({ fecha, ...j }));
+    const ausencias = ((await cargarAusencias([u.usuarioId], fDesde, fHasta, ["PENDIENTE", "APROBADA"])).get(u.usuarioId) ?? []).map((a) => ({
+      id: a.id, motivo: a.motivo, estado: a.estado, fechaInicio: a.fechaInicio, fechaFin: a.fechaFin, horaInicio: a.horaInicio, horaFin: a.horaFin, periodo: textoPeriodo(a),
+    }));
+    return json(200, { desde: fDesde, hasta: fHasta, dias, justificados, ausencias });
   }),
 });
 
