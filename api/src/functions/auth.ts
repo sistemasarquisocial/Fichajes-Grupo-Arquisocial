@@ -13,7 +13,7 @@ import {
 } from "../lib/auth";
 import { json, error, leerJson, conSesion, publico } from "../lib/http";
 import { auditar } from "../lib/auditoria";
-import { cargarOrg, directosDe } from "../lib/organizacion";
+import { cargarOrg, ambitoDe } from "../lib/organizacion";
 import { contarPendientes } from "../lib/incidencias";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -142,7 +142,7 @@ app.http("me", {
       if (!u.debeCambiarPassword) {
         try {
           const org = await cargarOrg();
-          tieneEquipo = tieneEquipo || directosDe(org, u.usuarioId).length > 0;
+          tieneEquipo = tieneEquipo || ambitoDe(org, u.usuarioId).length > 0;
           if (tieneEquipo) pendientesAprobacion = await contarPendientes(org, u);
         } catch {
           /* sin datos de organización: no bloquea el acceso */

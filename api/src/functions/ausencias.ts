@@ -289,9 +289,10 @@ app.http("enlaceDocumento", {
     const org = await cargarOrg();
     if (!puedeVerJustificante(org, u, d.UsuarioId)) return error(403, "No tienes permiso para ver este documento");
     if (!(await existe(d.Contenedor, d.Ruta))) return error(410, "El documento ya no está disponible (se borran a los 18 meses)");
-    const url = await enlaceLectura(d.Contenedor, d.Ruta, d.NombreOriginal);
+    const descargar = req.query.get("descargar") === "1";
+    const url = await enlaceLectura(d.Contenedor, d.Ruta, d.NombreOriginal, descargar);
     await auditar(
-      u.usuarioId, "ABRIR_JUSTIFICANTE", "Documento", id,
+      u.usuarioId, descargar ? "DESCARGAR_JUSTIFICANTE" : "ABRIR_JUSTIFICANTE", "Documento", id,
       `ausencia=${d.AusenciaId} de ${d.UsuarioId} (${nombreDe(org, d.UsuarioId)})${d.UsuarioId === u.usuarioId ? " (propio)" : ""}`,
       ipCliente(req)
     );
