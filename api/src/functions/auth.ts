@@ -10,6 +10,7 @@ import {
   crearToken,
   ipCliente,
   leerConfig,
+  primerAcceso,
 } from "../lib/auth";
 import { json, error, leerJson, conSesion, publico } from "../lib/http";
 import { auditar } from "../lib/auditoria";
@@ -118,6 +119,28 @@ app.http("login", {
     }
     await auditar(r.usuario.usuarioId, "LOGIN", "Usuario", r.usuario.usuarioId, null, ipCliente(req));
     return json(200, { usuario: r.usuario }, { cookies: [cookieSesion(r.token, recordar)] });
+  }),
+});
+
+/* ---------- Primer acceso (usuarios importados de a3, sin contraseña): email + DNI/NIE ---------- */
+app.http("primerAcceso", {
+  methods: ["POST"],
+  authLevel: "anonymous",
+  route: "auth/primer-acceso",
+  handler: publico(async (req) => {
+    const b = await leerJson(req);
+    if (!b || !validarEmail(b.email) || typeof b.dni !== "string" || !b.dni.trim()) return error(400, "Introduce tu email y tu DNI/NIE");
+    const errPw = validarPassword(b.password);
+    if (errPw) return error(400, errPw);
+    const r = await primerAcceso(b.email, b.dni, b.password);
+    if (!r.ok) {
+      await auditar(null, "PRIMER_ACCESO_FALLIDO", "Usuario", null, `${String(b.email).slice(0, 254)} (${r.motivo})`, ipCliente(req));
+      return r.motivo === "bloqueado"
+        ? error(423, "Cuenta bloqueada temporalmente por intentos fallidos. Inténtalo en unos minutos.")
+        : error(400, "No se ha podido activar la cuenta. Revisa el email y el DNI/NIE; si ya tienes contraseña, entra por «Acceder».");
+    }
+    await auditar(r.usuario.usuarioId, "PRIMER_ACCESO", "Usuario", r.usuario.usuarioId, null, ipCliente(req));
+    return json(200, { usuario: r.usuario }, { cookies: [cookieSesion(r.token, false)] });
   }),
 });
 
