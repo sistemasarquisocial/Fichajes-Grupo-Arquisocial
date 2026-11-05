@@ -6,6 +6,7 @@ import GestionDepartamentos from "./GestionDepartamentos";
 import GestionSuplencias from "./GestionSuplencias";
 import GestionFestivos from "./GestionFestivos";
 import GestionMotivos from "./GestionMotivos";
+import IntegracionA3 from "./IntegracionA3";
 
 const IconoUsuarios = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -48,6 +49,12 @@ const IconoMotivos = () => (
   </svg>
 );
 
+const IconoA3 = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 1 13.7-5.6L20 9M20 4v5h-5M20 12a8 8 0 0 1-13.7 5.6L4 15M4 20v-5h5" />
+  </svg>
+);
+
 /** Panel de administración (solo ADMIN): usuarios, departamentos, centros, empresas y suplencias. */
 export default function Admin() {
   return (
@@ -82,6 +89,10 @@ export default function Admin() {
             <IconoMotivos />
             <span><strong>Motivos de ausencia</strong><small>Permisos y si exigen justificante</small></span>
           </NavLink>
+          <NavLink to="a3">
+            <IconoA3 />
+            <span><strong>Integración a3</strong><small>Conexión, sincronización y pendientes</small></span>
+          </NavLink>
           <NavLink to="suplencias">
             <IconoSuplencias />
             <span><strong>Suplencias</strong><small>Sustitutos de aprobadores ausentes</small></span>
@@ -97,6 +108,7 @@ export default function Admin() {
             <Route path="calendario" element={<GestionFestivos />} />
             <Route path="motivos" element={<GestionMotivos />} />
             <Route path="suplencias" element={<GestionSuplencias />} />
+            <Route path="a3" element={<IntegracionA3 />} />
             <Route path="*" element={<Navigate to="usuarios" replace />} />
           </Routes>
         </div>
