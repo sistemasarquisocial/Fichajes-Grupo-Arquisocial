@@ -8,7 +8,10 @@ import { fechaLocal } from "./jornada";
    - DELEGACION: le aprueba el coordinador de su centro. Si es coordinador de algún centro,
      le aprueba el gestor de sus centros.
    - Suplencias: si el aprobador tiene una suplencia vigente hoy, aprueba el suplente.
-   "Mi equipo" = directos de la persona (y los de los titulares a los que suple hoy). */
+   "Mi equipo" = directos de la persona (y los de los titulares a los que suple hoy).
+   Ámbito (lo que ve y gestiona): sus directos + todo el personal de delegación de los centros que gestiona
+   (gestor) + el de los centros de los gestores que dirige (director territorial).
+   El gestor también puede aprobar al personal de sus centros, además del coordinador. */
 
 export type TipoPerfil = "ESTRUCTURA" | "DELEGACION";
 
@@ -107,6 +110,78 @@ export function directosDe(org: Org, id: number): number[] {
   return r;
 }
 
+/** Titulares a los que representa hoy `id`: él mismo y aquellos a los que suple. */
+export function representados(org: Org, id: number): Set<number> {
+  const r = new Set<number>([id]);
+  for (const s of org.suplencias.values()) if (s.suplenteId === id) r.add(s.titularId);
+  return r;
+}
+
+/** Centros cuyo gestor es `gestorId`. */
+export function centrosDeGestor(org: Org, gestorId: number): number[] {
+  return [...org.centros.values()].filter((c) => c.gestorId === gestorId).map((c) => c.id);
+}
+
+/** Centros que gestiona hoy `id` (como gestor o como suplente de un gestor). */
+export function centrosGestionados(org: Org, id: number): number[] {
+  return [...representados(org, id)].flatMap((t) => centrosDeGestor(org, t));
+}
+
+/** Gestor del centro de una persona de delegación (null si no aplica). */
+export function gestorDe(org: Org, id: number): number | null {
+  const u = org.usuarios.get(id);
+  if (!u || u.tipo !== "DELEGACION" || !u.centroId) return null;
+  return org.centros.get(u.centroId)?.gestorId ?? null;
+}
+
+/** Personal de delegación de unos centros (incluye a sus coordinadores). */
+function personalDeCentros(org: Org, centros: Set<number>): number[] {
+  const r = new Set<number>();
+  if (!centros.size) return [];
+  for (const u of org.usuarios.values()) if (u.tipo === "DELEGACION" && u.centroId && centros.has(u.centroId)) r.add(u.id);
+  for (const c of centros) {
+    const co = org.centros.get(c)?.coordinadorId;
+    if (co) r.add(co);
+  }
+  return [...r];
+}
+
+/** Centros de su zona: los que gestiona y los de los gestores que dirige (directos suyos). */
+export function centrosZona(org: Org, id: number): number[] {
+  const r = new Set<number>(centrosGestionados(org, id));
+  for (const d of directosDe(org, id)) for (const c of centrosDeGestor(org, d)) r.add(c);
+  return [...r];
+}
+
+/** Personas que ve y gestiona hoy `id`: directos + personal de los centros de su zona. */
+export function ambitoDe(org: Org, id: number): number[] {
+  const r = new Set<number>(directosDe(org, id));
+  for (const p of personalDeCentros(org, new Set(centrosZona(org, id)))) r.add(p);
+  r.delete(id);
+  return [...r];
+}
+
+/** Personas que aprueba hoy `id`: sus directos + el personal de los centros que gestiona. */
+export function aprobadosPor(org: Org, id: number): number[] {
+  const r = new Set<number>(directosDe(org, id));
+  for (const p of personalDeCentros(org, new Set(centrosGestionados(org, id)))) r.add(p);
+  r.delete(id);
+  return [...r];
+}
+
+/** Candidatos a suplente de un titular: su aprobador y, si es de estructura, sus compañeros de departamento. */
+export function candidatosSuplente(org: Org, titularId: number): number[] {
+  const t = org.usuarios.get(titularId);
+  if (!t) return [];
+  const r = new Set<number>();
+  const a = aprobadorTitular(org, titularId);
+  if (a) r.add(a);
+  if (t.tipo === "ESTRUCTURA" && t.departamentoId)
+    for (const u of org.usuarios.values()) if (u.tipo === "ESTRUCTURA" && u.departamentoId === t.departamentoId) r.add(u.id);
+  r.delete(titularId);
+  return [...r].filter((x) => org.usuarios.get(x)?.activo);
+}
+
 /** ¿Es aprobador de alguien (titular)? Sirve para saber si puede registrar suplencias. */
 export function esAprobador(org: Org, id: number): boolean {
   for (const u of org.usuarios.values()) if (u.id !== id && aprobadorTitular(org, u.id) === id) return true;
@@ -121,7 +196,7 @@ export const nombreDe = (org: Org, id: number | null) => {
 /** Empleados cuyos fichajes puede ver: null = todos (RRHH y ADMIN); si no, sus directos. */
 export async function idsVisibles(u: UsuarioSesion): Promise<number[] | null> {
   if (ROLES_VEN_TODO.includes(u.rol)) return null;
-  return directosDe(await cargarOrg(), u.usuarioId);
+  return ambitoDe(await cargarOrg(), u.usuarioId);
 }
 
 /** ¿Puede ver los fichajes de este empleado? */
