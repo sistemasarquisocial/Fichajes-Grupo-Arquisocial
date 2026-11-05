@@ -54,13 +54,13 @@ export async function existe(contenedor: Contenedor, ruta: string): Promise<bool
 }
 
 /** Enlace de solo lectura que caduca en 5 minutos. */
-export async function enlaceLectura(contenedor: Contenedor, ruta: string, nombre: string): Promise<string> {
+export async function enlaceLectura(contenedor: Contenedor, ruta: string, nombre: string, descargar = false): Promise<string> {
   const blob = servicio().getContainerClient(contenedor).getBlobClient(ruta);
   const ahora = Date.now();
   return blob.generateSasUrl({
     permissions: BlobSASPermissions.parse("r"),
     startsOn: new Date(ahora - 60000),
     expiresOn: new Date(ahora + MINUTOS_ENLACE * 60000),
-    contentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(nombre)}`,
+    contentDisposition: `${descargar ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(nombre)}`,
   });
 }

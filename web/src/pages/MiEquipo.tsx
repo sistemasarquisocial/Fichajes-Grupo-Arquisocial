@@ -384,7 +384,7 @@ function MiSuplencia() {
   async function abrir() {
     setMsg(null);
     setAbierta(true);
-    if (!directorio.length) setDirectorio((await api.directorio()).filter((x) => x.id !== usuario?.usuarioId));
+    if (!directorio.length) setDirectorio(await api.candidatosSuplente());
   }
 
   async function guardar(e: React.FormEvent) {
@@ -442,6 +442,7 @@ function MiSuplencia() {
               <option value="">Selecciona…</option>
               {directorio.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
             </select>
+            <span className="nota">Tu responsable o, en estructura, un compañero de tu departamento.</span>
           </label>
           <div className="fila-fechas">
             <label>Desde<input type="date" value={f.desde} min={hoy} onChange={(e) => setF({ ...f, desde: e.target.value })} required /></label>

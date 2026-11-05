@@ -3,11 +3,13 @@ import { getPool, sql } from "../lib/db";
 import { ipCliente } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
-import { cargarOrg, aprobadorEfectivo, directosDe, esAprobador, nombreDe } from "../lib/organizacion";
+import { cargarOrg, aprobadorEfectivo, directosDe, esAprobador, nombreDe, candidatosSuplente } from "../lib/organizacion";
 import { fechaLocal } from "../lib/jornada";
 
 /* Suplencias: mientras dura, el suplente aprueba y ve a los directos del titular.
-   Las registra el propio aprobador (para sí mismo) o ADMIN (para cualquiera). No se borran: se anulan. */
+   Las registra el propio aprobador (para sí mismo) o ADMIN (para cualquiera). No se borran: se anulan.
+   Suplente posible (salvo ADMIN): su propio aprobador o, en estructura, un compañero de su departamento.
+   Así un coordinador solo puede elegir a su gestor y un gestor a su director territorial o a otro gestor. */
 
 const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,16 +49,34 @@ app.http("miCadena", {
   }),
 });
 
-/* ---------- Directorio (solo nombres de usuarios activos) para elegir suplente ---------- */
+/* ---------- Candidatos a suplente del usuario conectado ---------- */
+app.http("candidatosSuplente", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "equipo/candidatos-suplente",
+  handler: conSesion(async (_req, _ctx, u) => {
+    const org = await cargarOrg();
+    if (!esAprobador(org, u.usuarioId)) return json(200, []);
+    const r = candidatosSuplente(org, u.usuarioId)
+      .map((id) => ({ id, nombre: nombreDe(org, id) as string }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    return json(200, r);
+  }),
+});
+
+/* ---------- Directorio de usuarios activos (solo ADMIN, para registrar suplencias de cualquiera) ---------- */
 app.http("directorio", {
   methods: ["GET"],
   authLevel: "anonymous",
   route: "equipo/directorio",
-  handler: conSesion(async () => {
-    const pool = await getPool();
-    const r = await pool.request().query("SELECT UsuarioId AS id, Nombre + N' ' + Apellidos AS nombre FROM fich.Usuarios WHERE Activo = 1 ORDER BY Nombre, Apellidos");
-    return json(200, r.recordset);
-  }),
+  handler: conSesion(
+    async () => {
+      const pool = await getPool();
+      const r = await pool.request().query("SELECT UsuarioId AS id, Nombre + N' ' + Apellidos AS nombre FROM fich.Usuarios WHERE Activo = 1 ORDER BY Nombre, Apellidos");
+      return json(200, r.recordset);
+    },
+    { roles: ["ADMIN"] }
+  ),
 });
 
 /* ---------- Listado completo (ADMIN) ---------- */
@@ -100,6 +120,8 @@ app.http("crearSuplencia", {
     const s = org.usuarios.get(suplenteId);
     if (!t || !t.activo) return error(400, "Titular no válido");
     if (!s || !s.activo) return error(400, "El suplente debe ser un usuario activo");
+    if (!esAdmin && !candidatosSuplente(org, titularId).includes(suplenteId))
+      return error(403, "Solo puedes elegir como suplente a tu responsable o a un compañero de tu departamento");
 
     const pool = await getPool();
     const solape = await pool

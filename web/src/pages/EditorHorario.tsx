@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, Horario, TipoHorario, TramoHorario, TramoDia, Turno, DetalleHorario, ETIQUETA_HORARIO, hoyLocal, duracion } from "../api";
 import Modal from "../components/Modal";
+import { copiarHorario, horarioParaPegar, useHorarioCopiado } from "../portapapelesHorario";
 
 const minTramo = (t: TramoDia) => {
   const a = Number(t.inicio.slice(0, 2)) * 60 + Number(t.inicio.slice(3));
@@ -165,6 +166,8 @@ export function FichaHorario({ id, nombre, centroId, onCerrar, onCambio }: { id:
   const [d, setD] = useState<DetalleHorario | null>(null);
   const [error, setError] = useState("");
   const [editar, setEditar] = useState(false);
+  const [pegar, setPegar] = useState(false);
+  const copiado = useHorarioCopiado();
   const mesHoy = hoyLocal().slice(0, 7);
   const [aj, setAj] = useState({ mes: mesHoy, horas: "", motivo: "" });
   const [cb, setCb] = useState({ fecha: hoyLocal(), libre: false, inicio: "08:00", fin: "15:00" });
@@ -194,6 +197,14 @@ export function FichaHorario({ id, nombre, centroId, onCerrar, onCambio }: { id:
 
   if (editar && d)
     return <EditorHorario ids={[id]} titulo={`Horario de ${nombre}`} inicial={d.horario} centroId={centroId} onCerrar={() => setEditar(false)} onGuardado={() => { setEditar(false); setOk("Horario guardado."); cargar(); onCambio(); }} />;
+  if (pegar && copiado)
+    return (
+      <EditorHorario
+        ids={[id]} titulo={`Horario de ${nombre} (copiado de ${copiado.nombre})`} inicial={horarioParaPegar(copiado, centroId)} centroId={centroId}
+        onCerrar={() => setPegar(false)} onGuardado={() => { setPegar(false); setOk(`Horario de ${copiado.nombre} aplicado.`); cargar(); onCambio(); }}
+      />
+    );
+  const puedePegar = !!d?.editable && !!copiado && copiado.origenId !== id;
 
   return (
     <Modal titulo={`Horario de ${nombre}`} onCerrar={onCerrar} ancho>
@@ -203,11 +214,21 @@ export function FichaHorario({ id, nombre, centroId, onCerrar, onCambio }: { id:
         <div className="ficha-horario">
           <div className="titulo-acciones">
             <div><strong>{d.resumen}</strong>{d.horario?.tipo === "VARIABLE" && d.horario.bolsaDesde && <div className="nota">Bolsa de horas desde {nombreMes(d.horario.bolsaDesde)}</div>}</div>
-            {d.editable && <button className="btn btn-primario" onClick={() => setEditar(true)}>{d.horario ? "Cambiar horario" : "Asignar horario"}</button>}
+            <div className="exportar-botones">
+              {d.horario && (
+                <button className="btn btn-secundario" onClick={() => { copiarHorario({ origenId: id, nombre, centroId, horario: d.horario! }); setOk("Horario copiado. Ábrelo en otra persona y pulsa «Pegar horario»."); }}>
+                  Copiar horario
+                </button>
+              )}
+              {puedePegar && <button className="btn btn-secundario" onClick={() => setPegar(true)}>Pegar horario de {copiado!.nombre}</button>}
+              {d.editable && <button className="btn btn-primario" onClick={() => setEditar(true)}>{d.horario ? "Cambiar horario" : "Asignar horario"}</button>}
+            </div>
           </div>
           {ok && <p className="exito" role="status">{ok}</p>}
           {error && <p className="error" role="alert">{error}</p>}
 
+          {d.horario ? (
+          <>
           <h3>Ajustes de horas del mes</h3>
           <p className="nota">Para vacaciones, bajas o meses distintos: sustituye las horas que le tocan ese mes.</p>
           {d.ajustes.length > 0 && (
@@ -227,6 +248,10 @@ export function FichaHorario({ id, nombre, centroId, onCerrar, onCambio }: { id:
               <label className="campo-ancho">Motivo<input value={aj.motivo} maxLength={200} onChange={(e) => setAj({ ...aj, motivo: e.target.value })} placeholder="Ej.: vacaciones del 10 al 24" /></label>
               <button className="btn btn-secundario">Guardar ajuste</button>
             </form>
+          )}
+          </>
+          ) : (
+            <p className="nota">Todavía no tiene horario. Cuando se le asigne, podrás ajustar sus horas del mes y hacer cambios de un día.</p>
           )}
 
           {d.horario && d.horario.tipo !== "VARIABLE" && (

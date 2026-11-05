@@ -30,6 +30,9 @@ export default function MisAusencias({ lista, resuelve, almacen, onCambio }: { l
         </div>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
+      {!almacen && lista.some((a) => a.estado === "PENDIENTE") && (
+        <p className="error" role="alert">Ahora mismo no se pueden adjuntar justificantes (almacenamiento no disponible). Avisa a Sistemas.</p>
+      )}
       <ul className="lista-incidencias">
         {visibles.map((a) => (
           <li key={a.id}>

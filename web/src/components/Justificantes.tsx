@@ -42,6 +42,22 @@ export async function abrirDocumento(id: number): Promise<string | null> {
   }
 }
 
+/** Descarga el documento (enlace temporal con descarga forzada). Devuelve el error, si lo hay. */
+export async function descargarDocumento(id: number): Promise<string | null> {
+  try {
+    const { url } = await api.enlaceDocumento(id, true);
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return null;
+  } catch (err) {
+    return err instanceof ApiError ? err.message : "No se pudo descargar el documento";
+  }
+}
+
 export function ListaDocumentos({ docs, onQuitar }: { docs: Documento[]; onQuitar?: (d: Documento) => void }) {
   const [error, setError] = useState("");
   if (!docs.length) return null;
@@ -53,6 +69,7 @@ export function ListaDocumentos({ docs, onQuitar }: { docs: Documento[]; onQuita
             {d.nombre}
           </button>
           <span className="nota">{tamano(d.bytes)}</span>
+          <button type="button" className="btn-link" onClick={async () => setError((await descargarDocumento(d.id)) ?? "")} aria-label={`Descargar ${d.nombre}`}>Descargar</button>
           {onQuitar && <button type="button" className="btn-link" aria-label={`Quitar ${d.nombre}`} onClick={() => onQuitar(d)}>Quitar</button>}
         </span>
       ))}

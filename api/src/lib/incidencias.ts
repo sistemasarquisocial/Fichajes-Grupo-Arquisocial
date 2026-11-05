@@ -1,11 +1,11 @@
 import { getPool, sql } from "./db";
 import { UsuarioSesion, ROLES_VEN_TODO } from "./auth";
-import { Org, aprobadorEfectivo, directosDe } from "./organizacion";
+import { Org, aprobadorEfectivo, aprobadosPor, gestorDe, representados } from "./organizacion";
 import { TipoFichaje, transicionesInvalidas } from "./jornada";
 import { FichajeEfectivo, fichajesEfectivos } from "./correcciones";
 
 /* Incidencias de fichaje: el empleado propone una corrección y su aprobador la acepta o rechaza.
-   - Resuelve el aprobador titular o el efectivo (suplente vigente).
+   - Resuelve el aprobador titular o el efectivo (suplente vigente). En delegación, también el gestor del centro.
    - Si el empleado no tiene aprobador (p. ej. la CEO o sin perfil), resuelven RRHH y ADMIN.
    - Nadie resuelve sus propias incidencias. */
 
@@ -17,13 +17,15 @@ const DIA = 86400000;
 export function puedeResolver(org: Org, actor: UsuarioSesion, solicitanteId: number): boolean {
   if (actor.usuarioId === solicitanteId) return false;
   const a = aprobadorEfectivo(org, solicitanteId);
-  if (a.titular === null) return ROLES_VEN_TODO.includes(actor.rol);
-  return a.titular === actor.usuarioId || a.efectivo === actor.usuarioId;
+  if (a.titular === actor.usuarioId || a.efectivo === actor.usuarioId) return true;
+  const g = gestorDe(org, solicitanteId);
+  if (g && representados(org, actor.usuarioId).has(g)) return true;
+  return a.titular === null && ROLES_VEN_TODO.includes(actor.rol);
 }
 
 /** Empleados cuyas incidencias resuelve hoy el actor. */
 export function solicitantesDe(org: Org, actor: UsuarioSesion): number[] {
-  const ids = new Set(directosDe(org, actor.usuarioId));
+  const ids = new Set(aprobadosPor(org, actor.usuarioId));
   if (ROLES_VEN_TODO.includes(actor.rol)) {
     for (const u of org.usuarios.values()) if (u.id !== actor.usuarioId && aprobadorEfectivo(org, u.id).titular === null) ids.add(u.id);
   }

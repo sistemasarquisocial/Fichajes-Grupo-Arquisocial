@@ -4,7 +4,7 @@ import { getPool, sql } from "../lib/db";
 import { ipCliente, ROLES_VEN_TODO, UsuarioSesion } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
-import { cargarOrg, idsVisibles, puedeVerEmpleado, Org } from "../lib/organizacion";
+import { cargarOrg, idsVisibles, puedeVerEmpleado, Org, representados, centrosGestionados, centrosZona } from "../lib/organizacion";
 import { fechaLocal } from "../lib/jornada";
 import { fichajesEfectivos } from "../lib/correcciones";
 import {
@@ -15,7 +15,8 @@ import { cargarFestivosManuales } from "../lib/calendario";
 
 /* Horarios, saldo y bolsa de horas, presencia en vivo, propuesta de cobertura y turnos de centro.
    Gestionan el horario de una persona: su aprobador (titular o suplente), RRHH y ADMIN. Nadie el suyo propio
-   salvo RRHH/ADMIN. Los turnos de un centro: su coordinador (o quien le suple), RRHH y ADMIN. */
+   salvo RRHH/ADMIN. Los turnos de un centro los gestionan su coordinador, su gestor (o quien les suple), RRHH y ADMIN.
+   Se ven los del centro donde está ubicado, los que coordina o gestiona y los de su zona; RRHH y ADMIN, todos. */
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const veTodo = (u: UsuarioSesion) => ROLES_VEN_TODO.includes(u.rol);
@@ -29,9 +30,18 @@ async function puedeGestionarHorario(u: UsuarioSesion, empleadoId: number) {
 /** Centros cuyos turnos gestiona (null = todos). */
 function centrosTurnos(org: Org, u: UsuarioSesion): number[] | null {
   if (veTodo(u)) return null;
-  const titulares = new Set<number>([u.usuarioId]);
-  for (const s of org.suplencias.values()) if (s.suplenteId === u.usuarioId) titulares.add(s.titularId);
-  return [...titulares].flatMap((t) => org.centrosQueCoordina.get(t) ?? []);
+  const r = new Set<number>([...representados(org, u.usuarioId)].flatMap((t) => org.centrosQueCoordina.get(t) ?? []));
+  for (const c of centrosGestionados(org, u.usuarioId)) r.add(c);
+  return [...r];
+}
+
+/** Centros cuyos turnos puede ver (null = todos): donde está ubicado, los que gestiona y los de su zona. */
+function centrosTurnosVisibles(org: Org, u: UsuarioSesion): number[] | null {
+  if (veTodo(u)) return null;
+  const r = new Set<number>([...(centrosTurnos(org, u) ?? []), ...centrosZona(org, u.usuarioId)]);
+  const yo = org.usuarios.get(u.usuarioId);
+  if (yo?.centroId) r.add(yo.centroId);
+  return [...r];
 }
 
 /** Valida los tramos del patrón. */
@@ -220,6 +230,7 @@ app.http("horarioAjuste", {
     const b = await leerJson(req);
     const mes = String(b?.mes ?? "");
     if (!RE_MES.test(mes)) return error(400, "Mes no válido");
+    if (b?.horas !== null && !(await cargarHorarios([id])).get(id)) return error(400, "Asigna primero un horario a esta persona");
     if (mes < mesActual()) {
       const c = await (await getPool()).request().input("u", sql.Int, id).input("m", sql.Char(7), mes).query("SELECT 1 AS x FROM fich.CierresMes WHERE UsuarioId = @u AND Mes = @m");
       if (c.recordset.length) return error(409, "Ese mes ya está cerrado en la bolsa de horas y no se puede ajustar");
@@ -404,18 +415,29 @@ app.http("turnosListar", {
   handler: conSesion(async (req, _ctx, u) => {
     const org = await cargarOrg();
     const permitidos = centrosTurnos(org, u);
+    const visibles = centrosTurnosVisibles(org, u);
     const centroId = req.query.get("centroId") ? Number(req.query.get("centroId")) : null;
+    // Al editar el horario de alguien de su ámbito puede pedir los turnos de su centro para elegirlos
+    let ambito: number[] = [];
+    if (centroId && visibles !== null && !visibles.includes(centroId)) {
+      const vis = await idsVisibles(u);
+      ambito = (vis ?? []).filter((id) => org.usuarios.get(id)?.centroId === centroId);
+      if (!ambito.length) return error(403, "No tienes acceso a los turnos de ese centro");
+    }
+    const filtro = visibles === null || ambito.length ? null : visibles;
     const pool = await getPool();
     const r = await pool
       .request()
       .input("c", sql.Int, centroId)
+      .input("vis", sql.NVarChar(sql.MAX), (filtro ?? []).join(","))
       .query(
         `SELECT t.TurnoId AS id, t.CentroId AS centroId, c.Nombre AS centro, t.Nombre AS nombre,
                 CONVERT(char(5), t.HoraInicio, 108) AS inicio, CONVERT(char(5), t.HoraFin, 108) AS fin, t.Activo AS activo
            FROM fich.Turnos t JOIN fich.Centros c ON c.CentroId = t.CentroId
-          WHERE (@c IS NULL OR t.CentroId = @c) ORDER BY c.Nombre, t.HoraInicio`
+          WHERE (@c IS NULL OR t.CentroId = @c)
+            AND ${filtro === null ? "1 = 1" : "t.CentroId IN (SELECT CAST(value AS INT) FROM STRING_SPLIT(@vis, ','))"}
+          ORDER BY c.Nombre, t.HoraInicio`
       );
-    // Cualquiera que gestione horarios puede ver los turnos (para elegirlos); editar, según permitidos
     return json(200, {
       turnos: r.recordset.map((x: any) => ({ ...x, activo: !!x.activo, editable: permitidos === null || permitidos.includes(x.centroId) })),
       centrosEditables: permitidos,

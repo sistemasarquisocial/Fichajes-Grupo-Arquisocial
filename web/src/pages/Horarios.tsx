@@ -6,6 +6,7 @@ import {
 import { useSesion } from "../sesion";
 import Modal from "../components/Modal";
 import { EditorHorario, FichaHorario } from "./EditorHorario";
+import { copiarHorario, horarioParaPegar, useHorarioCopiado } from "../portapapelesHorario";
 
 /* Horarios: presencia en vivo y avisos, horario/saldo/bolsa de cada persona, turnos de centro y propuesta de cobertura. */
 
@@ -151,7 +152,21 @@ function HorariosBolsa({ grupo, setGrupo, filtro, onCentros }: { grupo: string; 
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [ficha, setFicha] = useState<EmpleadoHorario | null>(null);
   const [masivo, setMasivo] = useState(false);
+  const [pegarEn, setPegarEn] = useState<{ ids: number[]; centroId: number | null; titulo: string } | null>(null);
   const [ok, setOk] = useState("");
+  const copiado = useHorarioCopiado();
+
+  async function copiar(e: EmpleadoHorario) {
+    setError(""); setOk("");
+    try {
+      const d = await api.horarioDetalle(e.id);
+      if (!d.horario) return setError("Esa persona no tiene horario que copiar.");
+      copiarHorario({ origenId: e.id, nombre: `${e.nombre} ${e.apellidos}`, centroId: e.centroId, horario: d.horario });
+      setOk(`Horario de ${e.nombre} ${e.apellidos} copiado. Pulsa «Pegar» en otra persona o selecciona varias.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo copiar el horario");
+    }
+  }
 
   async function cargar(m = mes) {
     setLista(null);
@@ -184,11 +199,19 @@ function HorariosBolsa({ grupo, setGrupo, filtro, onCentros }: { grupo: string; 
       </form>
       {error && <p className="error" role="alert">{error}</p>}
       {ok && <p className="exito" role="status">{ok}</p>}
+      {copiado && sel.size === 0 && (
+        <p className="nota">Horario copiado: <strong>{copiado.nombre}</strong>. Pulsa «Pegar» en una persona o selecciona varias. <button className="btn-link" onClick={() => copiarHorario(null)}>Descartar</button></p>
+      )}
       {sel.size > 0 && (
         <div className="seleccion-barra">
           <span><strong>{sel.size}</strong> seleccionada(s)</span>
           <div className="exportar-botones">
             <button className="btn btn-primario" onClick={() => setMasivo(true)}>Asignar el mismo horario</button>
+            {copiado && (
+              <button className="btn btn-secundario" onClick={() => setPegarEn({ ids: [...sel], centroId: centroComun, titulo: `Horario de ${copiado.nombre} para ${sel.size} persona(s)` })}>
+                Pegar horario de {copiado.nombre}
+              </button>
+            )}
             <button className="btn-link" onClick={() => setSel(new Set())}>Quitar selección</button>
           </div>
         </div>
@@ -231,7 +254,13 @@ function HorariosBolsa({ grupo, setGrupo, filtro, onCentros }: { grupo: string; 
                       </>
                     ) : <span className="nota">—</span>}
                   </td>
-                  <td className="acciones-fila"><button className="btn-link" onClick={() => setFicha(e)}>{e.propio ? "Ver" : "Horario"}</button></td>
+                  <td className="acciones-fila">
+                    <button className="btn-link" onClick={() => setFicha(e)}>{e.propio ? "Ver" : "Horario"}</button>
+                    {e.horario && <button className="btn-link" onClick={() => copiar(e)}>Copiar</button>}
+                    {copiado && !e.propio && copiado.origenId !== e.id && (
+                      <button className="btn-link" title={`Pegar el horario de ${copiado.nombre}`} onClick={() => setPegarEn({ ids: [e.id], centroId: e.centroId, titulo: `Horario de ${e.nombre} ${e.apellidos} (copiado de ${copiado.nombre})` })}>Pegar</button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -242,6 +271,13 @@ function HorariosBolsa({ grupo, setGrupo, filtro, onCentros }: { grupo: string; 
       <p className="nota">Fijo y rotativo: el saldo es informativo. Variable: pendientes = bolsa de meses anteriores + horas del mes aún no trabajadas; al cerrar el mes, lo no trabajado pasa a la bolsa y lo trabajado de más la compensa.</p>
 
       {ficha && <FichaHorario id={ficha.id} nombre={`${ficha.nombre} ${ficha.apellidos}`} centroId={ficha.centroId} onCerrar={() => setFicha(null)} onCambio={() => cargar()} />}
+      {pegarEn && copiado && (
+        <EditorHorario
+          ids={pegarEn.ids} titulo={pegarEn.titulo} inicial={horarioParaPegar(copiado, pegarEn.centroId)} centroId={pegarEn.centroId}
+          onCerrar={() => setPegarEn(null)}
+          onGuardado={() => { const n = pegarEn.ids.length; setPegarEn(null); setOk(`Horario de ${copiado.nombre} aplicado a ${n} persona(s).`); setSel(new Set()); cargar(); }}
+        />
+      )}
       {masivo && (
         <EditorHorario
           ids={[...sel]} titulo={`Horario para ${sel.size} personas`} inicial={null} centroId={centroComun}

@@ -409,7 +409,7 @@ function ResponsablesCentro({ centro, onCerrar, onGuardado }: { centro: Centro; 
               {opcGestor.map((u) => <option key={u.id} value={u.id}>{etiqueta(u)}</option>)}
             </select>
           </label>
-          <p className="nota">Aprueba al coordinador. Al gestor le aprueba el manager de su departamento de Gestión (director territorial).</p>
+          <p className="nota">Aprueba al coordinador y ve y puede aprobar a todo el personal del centro. Al gestor le aprueba el manager de su departamento de Gestión (director territorial), que ve a todo el personal de su zona.</p>
           {error && <p className="error" role="alert">{error}</p>}
           <div className="modal-acciones">
             <button type="button" className="btn btn-secundario" onClick={onCerrar}>Cancelar</button>

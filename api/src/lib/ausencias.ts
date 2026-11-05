@@ -1,6 +1,6 @@
 import { getPool, sql } from "./db";
 import { UsuarioSesion, ROLES_VEN_TODO } from "./auth";
-import { Org, aprobadorEfectivo } from "./organizacion";
+import { Org, aprobadorEfectivo, gestorDe, representados } from "./organizacion";
 
 /* Ausencias justificadas (db/009_ausencias.sql).
    - Unas horas de un día (HoraInicio/HoraFin) o días completos (sin horas).
@@ -119,11 +119,13 @@ export async function cargarAusencias(ids: number[] | null, desde: string, hasta
 
 /* ---------- permisos ---------- */
 
-/** Ven el justificante: la propia persona, su aprobador (titular o suplente vigente), RRHH y ADMIN. */
+/** Ven el justificante: la propia persona, su aprobador (titular o suplente vigente), el gestor de su centro, RRHH y ADMIN. */
 export function puedeVerJustificante(org: Org, actor: UsuarioSesion, propietarioId: number): boolean {
   if (actor.usuarioId === propietarioId || ROLES_VEN_TODO.includes(actor.rol)) return true;
   const a = aprobadorEfectivo(org, propietarioId);
-  return a.titular === actor.usuarioId || a.efectivo === actor.usuarioId;
+  if (a.titular === actor.usuarioId || a.efectivo === actor.usuarioId) return true;
+  const g = gestorDe(org, propietarioId);
+  return !!g && representados(org, actor.usuarioId).has(g);
 }
 
 /** Texto corto del periodo: "12/11/2026 10:00–12:00", "12/11/2026", "12/11/2026 – 14/11/2026". */

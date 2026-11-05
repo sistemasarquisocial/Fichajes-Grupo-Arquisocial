@@ -138,6 +138,7 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
 .chip-salida { background: #fbeceb; color: var(--rojo); }
 .chip-pausa_inicio { background: #fbf1da; color: #8a6514; }
 .acciones-fila { white-space: nowrap; }
+.acciones-fila .btn-link + .btn-link { margin-left: 12px; }
 .admin .acciones-fila { white-space: normal; width: 1%; }
 .admin .acciones-fila .btn-link { display: block; white-space: nowrap; margin: 0 0 6px; text-align: left; }
 .lista-simple { margin: 8px 0 0; padding-left: 18px; color: var(--texto-suave); }
