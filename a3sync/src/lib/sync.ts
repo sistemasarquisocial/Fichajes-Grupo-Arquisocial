@@ -30,24 +30,47 @@ type Log = (m: string) => void;
 const hoyMadrid = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid" }).format(new Date());
 const restarDias = (f: string, d: number) => new Date(Date.parse(f + "T00:00:00Z") - d * 86400000).toISOString().slice(0, 10);
 
+/* Alcance de la sincronización (variable A3_ALCANCE de la Function App), para la carga progresiva:
+   - EMPRESAS (por defecto): solo la lista de empresas de a3 → fich.A3Empresas. 1 llamada.
+   - CENTROS: además, los centros de las empresas importadas → fich.A3Centros. Sin trabajadores.
+   - TODO: empresas, centros, trabajadores, organigrama y conciliación con los usuarios.
+   A3_EMPRESAS (opcional): códigos a3 separados por comas para limitar el paso 2 (p. ej. "355"). */
+export type Alcance = "EMPRESAS" | "CENTROS" | "TODO";
+export function alcanceConfigurado(v = process.env.A3_ALCANCE): Alcance {
+  const a = String(v ?? "").trim().toUpperCase();
+  return a === "CENTROS" || a === "TODO" ? a : "EMPRESAS";
+}
+export function empresasLimitadas(v = process.env.A3_EMPRESAS): Set<number> | null {
+  const l = String(v ?? "").split(",").map((x) => Number(x.trim())).filter((x) => Number.isInteger(x) && x > 0);
+  return l.length ? new Set(l) : null;
+}
+
 export async function sincronizar(completaPedida: boolean, log: Log): Promise<Estadisticas> {
   const est: Estadisticas = { llamadas: 0, empresas: 0, centros: 0, empleadosLeidos: 0, usuariosCreados: 0, usuariosActualizados: 0, usuariosDesactivados: 0, pendientes: 0, errores: [] };
   const hoy = hoyMadrid();
   const con = await leerConexion();
   const completa = completaPedida || !con.marcaEmpleados;
+  const alcance = alcanceConfigurado();
+  const limite = empresasLimitadas();
+  log(`Alcance ${alcance}${limite ? `, empresas ${[...limite].join(",")}` : ""}`);
   const cli = await crearCliente();
   const pool = await getPool();
 
   // 1. Empresas
   const empresasA3 = (await cli.todas<any>("/api/companies")) ?? [];
-  const importadas = await guardarEmpresas(pool, empresasA3, log);
-  est.empresas = importadas.length;
+  const importadas = (await guardarEmpresas(pool, empresasA3, log)).filter((x) => !limite || limite.has(x.codigoA3));
+  est.empresas = empresasA3.length;
+  if (alcance === "EMPRESAS") {
+    est.llamadas = cli.llamadas;
+    return est;
+  }
 
   // 2. Por empresa
   const leidas = new Set<number>();
   for (const cc of importadas.map((x) => x.codigoA3)) {
     try {
       est.centros += await leerCentros(cli, pool, cc, completa);
+      if (alcance === "CENTROS") continue;
       est.empleadosLeidos += await leerEmpleados(cli, pool, cc, completa, con.marcaEmpleados, hoy, log);
       leidas.add(cc);
       await leerOrganigrama(cli, pool, cc).catch((e) => log(`Organigrama ${cc}: ${e?.message ?? e}`));
@@ -57,6 +80,11 @@ export async function sincronizar(completaPedida: boolean, log: Log): Promise<Es
       log(m);
       if (e?.name === "ConexionNoDisponible") throw e;
     }
+  }
+
+  if (alcance === "CENTROS") {
+    est.llamadas = cli.llamadas;
+    return est;
   }
 
   // 3. Conciliación
@@ -86,7 +114,7 @@ async function guardarEmpresas(pool: sql.ConnectionPool, lista: any[], log: Log)
       .query(
         `MERGE fich.A3Empresas AS t USING (SELECT @c AS CodigoA3) AS s ON t.CodigoA3 = s.CodigoA3
          WHEN MATCHED THEN UPDATE SET Nombre = @n, CIF = @cif, LastUpdateA3 = @lu, ActualizadoUtc = SYSUTCDATETIME()
-         WHEN NOT MATCHED THEN INSERT (CodigoA3, Nombre, CIF, LastUpdateA3) VALUES (@c, @n, @cif, @lu);`
+         WHEN NOT MATCHED THEN INSERT (CodigoA3, Nombre, CIF, LastUpdateA3, Importar) VALUES (@c, @n, @cif, @lu, 0);`
       );
   }
   // Empresas que se importan y aún no existen en la app: se crean (si ya hay una con ese nombre, se enlaza)
