@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Org, aprobadorTitular, aprobadorEfectivo, directosDe, esAprobador } from "../src/lib/organizacion";
+import { Org, aprobadorTitular, aprobadorEfectivo, directosDe, esAprobador, ambitoDe, aprobadosPor, candidatosSuplente, centrosZona } from "../src/lib/organizacion";
+import { puedeResolver } from "../src/lib/incidencias";
 
 /* Organización de ejemplo:
    CEO(1) dirige Dirección(10); manager de ella: nadie.
@@ -56,4 +57,28 @@ test("suplencia vigente", () => {
   assert.equal(aprobadorEfectivo(o, 6).efectivo, 4);
   // el suplente ve los directos del titular (incluido él mismo no)
   assert.deepEqual(directosDe(o, 6), [5]);
+});
+
+test("ámbito: el gestor ve y aprueba a todo el personal de sus centros; el director ve su zona", () => {
+  const o = org();
+  const ord = (a: number[]) => [...a].sort((x, y) => x - y);
+  assert.deepEqual(ord(ambitoDe(o, 3)), [4, 5, 6]); // gestor: coordinador + personal de 100 y 101
+  assert.deepEqual(ord(aprobadosPor(o, 3)), [4, 5, 6]);
+  assert.deepEqual(ord(ambitoDe(o, 2)), [3, 4, 5, 6]); // director: su gestor y la zona
+  assert.deepEqual(ord(aprobadosPor(o, 2)), [3]); // pero solo aprueba a sus directos
+  assert.deepEqual(ord(centrosZona(o, 2)), [100, 101]);
+  assert.deepEqual(ord(ambitoDe(o, 4)), [5, 6]); // coordinador: igual que antes
+  assert.deepEqual(ambitoDe(o, 5), []);
+  const g = { usuarioId: 3, rol: "EMPLEADO" } as any;
+  assert.equal(puedeResolver(o, g, 5), true); // gestor aprueba a personal del centro
+  assert.equal(puedeResolver(o, { usuarioId: 2, rol: "EMPLEADO" } as any, 5), false); // director no
+});
+
+test("candidatos a suplente", () => {
+  const o = org();
+  const ord = (a: number[]) => [...a].sort((x, y) => x - y);
+  assert.deepEqual(ord(candidatosSuplente(o, 4)), [3]); // coordinador → solo su gestor
+  assert.deepEqual(ord(candidatosSuplente(o, 3)), [2]); // gestor → director o compañeros de Gestión (aquí solo el director)
+  assert.deepEqual(ord(candidatosSuplente(o, 7)), [1, 8]); // jefa RRHH → CEO o su departamento
+  assert.deepEqual(ord(candidatosSuplente(o, 2)), [1, 3]); // director → CEO o personas de Gestión Norte
 });
