@@ -180,3 +180,16 @@ test("OAuth: URL de autorización y usuario del token", () => {
   const jwt = (p: object) => `x.${Buffer.from(JSON.stringify(p)).toString("base64url")}.y`;
   assert.equal(usuarioDeTokens({ access_token: jwt({ "wk.es.a3equipouserid": "sistemas@arquisocial.es" }) }), "sistemas@arquisocial.es");
 });
+
+/* ---------- Alcance de la carga progresiva ---------- */
+test("alcance de la sincronización: por defecto solo empresas", async () => {
+  const { alcanceConfigurado, empresasLimitadas } = await import("../src/lib/sync");
+  assert.equal(alcanceConfigurado(undefined), "EMPRESAS");
+  assert.equal(alcanceConfigurado(""), "EMPRESAS");
+  assert.equal(alcanceConfigurado("otra cosa"), "EMPRESAS");
+  assert.equal(alcanceConfigurado(" centros "), "CENTROS");
+  assert.equal(alcanceConfigurado("TODO"), "TODO");
+  assert.equal(empresasLimitadas(undefined), null);
+  assert.equal(empresasLimitadas(" , x"), null);
+  assert.deepEqual([...(empresasLimitadas("355, 1 ,356") ?? [])], [355, 1, 356]);
+});
