@@ -58,7 +58,8 @@ function cliente(): SecretClient {
 
 export async function leerSecreto(nombre: string): Promise<string | null> {
   try {
-    return (await cliente().getSecret(nombre)).value ?? null;
+    // Se recortan espacios y saltos de línea que se cuelan al pegar el valor en el portal
+    return (await cliente().getSecret(nombre)).value?.trim() || null;
   } catch (e: any) {
     if (e?.statusCode === 404) return null;
     throw e;
