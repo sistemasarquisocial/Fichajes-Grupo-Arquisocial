@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 local.settings.json
 .env
+a3sync/package-lock.json
