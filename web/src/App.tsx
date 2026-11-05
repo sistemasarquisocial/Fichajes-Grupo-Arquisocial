@@ -4,6 +4,7 @@ import { api } from "./api";
 import { useSesion } from "./sesion";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
+import PrimerAcceso from "./pages/PrimerAcceso";
 import CambiarPassword from "./pages/CambiarPassword";
 import Fichar from "./pages/Fichar";
 import Historial from "./pages/Historial";
@@ -35,6 +36,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/setup" element={<Setup />} />
+        <Route path="/primer-acceso" element={<PrimerAcceso />} />
         <Route path="*" element={<Login />} />
       </Routes>
     );

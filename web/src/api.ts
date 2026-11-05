@@ -223,6 +223,49 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+/* ---------- Integración a3innuva ---------- */
+export type EstadoConexionA3 = "DESCONECTADA" | "CONECTADA" | "CADUCADA" | "ERROR";
+export interface SincronizacionA3 {
+  id: number; tipo: "NOCTURNA" | "MANUAL"; completa: boolean; estado: "PENDIENTE" | "EN_CURSO" | "OK" | "ERROR";
+  solicitadaUtc: string; inicioUtc: string | null; finUtc: string | null; solicitadaPor: string | null;
+  llamadas: number; empresas: number; centros: number; empleadosLeidos: number; creados: number; actualizados: number; desactivados: number; pendientes: number;
+  error: string | null;
+}
+export interface EstadoA3 {
+  conexion: {
+    estado: EstadoConexionA3; configurada: boolean; usuarioA3: string | null; conectadaUtc: string | null; conectadaPor: string | null;
+    caducaUtc: string | null; diasParaCaducar: number | null; avisoCaducidad: boolean; ultimaSyncOkUtc: string | null; ultimoError: string | null;
+  };
+  sincronizaciones: SincronizacionA3[];
+  pendientes: Record<string, number>;
+  centrosA3: { total: number; sinServicio: number };
+  centrosEstructura: number;
+  usuariosA3: number;
+}
+export type TipoPendienteA3 = "CENTRO_SIN_SERVICIO" | "SIN_EMAIL" | "EMAIL_DUPLICADO" | "EMAIL_CAMBIADO" | "DNI_INVALIDO" | "USUARIO_DESACTIVADO";
+export const ETIQUETA_PENDIENTE_A3: Record<TipoPendienteA3, string> = {
+  CENTRO_SIN_SERVICIO: "Centro sin servicio",
+  SIN_EMAIL: "Sin email",
+  EMAIL_DUPLICADO: "Email repetido",
+  EMAIL_CAMBIADO: "Email distinto",
+  DNI_INVALIDO: "DNI/NIE no válido",
+  USUARIO_DESACTIVADO: "Desactivado en la app",
+};
+export interface PendienteA3 {
+  id: number; tipo: TipoPendienteA3; empresaA3: number | null; empleadoA3: string | null; centroA3: number | null; detalle: string;
+  creadoUtc: string; vistoUtc: string; resueltoUtc: string | null; resolucion: "AUTO" | "IGNORADO" | null; resueltoPor: string | null;
+}
+export interface EmpresaA3 { codigoA3: number; nombre: string; cif: string | null; importar: boolean; empresaId: number | null; empresa: string | null; enAlta: number; centros: number }
+export interface CentroA3 {
+  empresaA3: number; empresa: string; centroA3: number; nombre: string; direccion: string | null; codigoPostal: string | null; ciudad: string | null;
+  activo: boolean; centroId: number | null; servicio: string | null; codigoServicio: string | null; esEstructura: boolean; enAlta: number;
+}
+export interface ServicioA3 { id: number; codigoServicio: string | null; nombre: string; empresa: string; esEstructura: boolean; centrosA3: number }
+export interface NodoOrganigramaA3 {
+  id: string; padreId: string | null; empresaA3: number; empresa: string; tipo: string | null; codigo: string | null; nombre: string | null;
+  descripcion: string | null; responsable: string | null; responsableCodigo: string | null; usuarioId: number | null; usuario: string | null; fechaBaja: string | null;
+}
+
 async function llamar<T>(metodo: string, ruta: string, cuerpo?: unknown): Promise<T> {
   const res = await fetch(`/api/${ruta}`, {
     method: metodo,
@@ -243,7 +286,21 @@ export const api = {
 
   login: (email: string, password: string, recordar = false) =>
     llamar<{ usuario: Usuario }>("POST", "auth/login", { email, password, recordar }),
+  primerAcceso: (email: string, dni: string, password: string) => llamar<{ usuario: Usuario }>("POST", "auth/primer-acceso", { email, dni, password }),
   logout: () => llamar("POST", "auth/logout"),
+
+  a3Estado: () => llamar<EstadoA3>("GET", "gestion/a3/estado"),
+  a3Conectar: () => llamar<{ url: string }>("POST", "gestion/a3/conectar"),
+  a3Sincronizar: (completa: boolean) => llamar<{ id: number }>("POST", "gestion/a3/sincronizar", { completa }),
+  a3Pendientes: (estado: "abiertos" | "resueltos") => llamar<PendienteA3[]>("GET", `gestion/a3/pendientes?estado=${estado}`),
+  a3IgnorarPendiente: (id: number) => llamar("PUT", `gestion/a3/pendientes/${id}/ignorar`),
+  a3Empresas: () => llamar<EmpresaA3[]>("GET", "gestion/a3/empresas"),
+  a3EditarEmpresa: (codigo: number, d: { importar: boolean; empresaId: number | null }) => llamar("PUT", `gestion/a3/empresas/${codigo}`, d),
+  a3Centros: () => llamar<CentroA3[]>("GET", "gestion/a3/centros"),
+  a3AsignarCentro: (empresa: number, centro: number, centroId: number | null) => llamar("PUT", `gestion/a3/centros/${empresa}/${centro}`, { centroId }),
+  a3Servicios: () => llamar<ServicioA3[]>("GET", "gestion/a3/servicios"),
+  a3MarcarEstructura: (id: number, esEstructura: boolean) => llamar("PUT", `gestion/a3/servicios/${id}/estructura`, { esEstructura }),
+  a3Organigrama: () => llamar<NodoOrganigramaA3[]>("GET", "gestion/a3/organigrama"),
   me: () => llamar<{ usuario: Usuario }>("GET", "auth/me"),
   cambiarPassword: (actual: string, nueva: string) => llamar("POST", "auth/cambiar-password", { actual, nueva }),
 

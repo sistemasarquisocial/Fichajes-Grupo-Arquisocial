@@ -451,3 +451,24 @@ textarea:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-co
 .subir-justificante { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .aviso-justificante { color: var(--rojo); font-size: 0.85rem; }
 .apartado { font-size: 1rem; margin: 14px 0 4px; }
+
+/* Integración a3 */
+.acceso-intro { margin: -14px 0 18px; }
+.a3-cuerpo { margin-top: 16px; }
+.a3-cuerpo > .tarjeta + .tarjeta, .a3-cuerpo > .equipo-kpis + .tarjeta, .a3-cuerpo > .tarjeta + .equipo-kpis { margin-top: 16px; }
+.a3-cuerpo .equipo-kpis { margin-top: 16px; }
+.a3 h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kpi-boton { border: none; font: inherit; text-align: left; cursor: pointer; }
+.kpi-boton:hover, .kpi-boton:focus-visible { outline: 2px solid var(--verde); outline-offset: 1px; }
+.a3-chip-conectada, .a3-sync-ok { background: var(--verde-claro); color: var(--verde-oscuro); }
+.a3-chip-desconectada, .a3-sync-pendiente { background: #eceeed; color: var(--texto-suave); }
+.a3-chip-caducada, .a3-chip-error, .a3-sync-error { background: #fbeceb; color: var(--rojo); }
+.a3-sync-en_curso, .a3-chip-pendiente { background: #fbf1da; color: #8a6514; }
+.a3-error-sync { max-width: 360px; white-space: normal; }
+.a3-oh { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+.a3-oh .btn-link { margin-left: 6px; font-size: 0.8rem; }
+.a3-select-largo { min-width: 320px; flex: 1 1 320px; }
+.a3-buscar { min-width: 240px; flex: 1 1 240px; }
+.a3 .tabla select { max-width: 340px; width: 100%; }
+.a3-vacio { padding: 16px; }
+.a3-org { display: inline-block; }
