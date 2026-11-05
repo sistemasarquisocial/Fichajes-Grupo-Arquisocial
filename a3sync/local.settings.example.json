@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "KEY_VAULT_URL": "https://kv-fichajes-prod.vault.azure.net/",
+    "SQL_SERVER": "sql-fichajes-prod-neu.database.windows.net",
+    "SQL_DATABASE": "sqldb-fichajes-prod"
+  }
+}

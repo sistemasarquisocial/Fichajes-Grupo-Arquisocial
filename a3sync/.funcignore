@@ -1,0 +1,5 @@
+test
+src
+tsconfig.json
+local.settings*.json
+README.md
