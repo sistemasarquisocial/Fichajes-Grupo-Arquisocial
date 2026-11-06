@@ -4,7 +4,7 @@ import SelectorPersona from "../components/SelectorPersona";
 import ListadoUsuarios from "../components/ListadoUsuarios";
 
 const VACIO = {
-  email: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
+  email: "", emailCorporativo: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
   tipoPerfil: "" as TipoPerfil | "", departamentoId: "", managerId: "",
 };
 
@@ -43,7 +43,7 @@ export default function GestionUsuarios() {
     setCredenciales(null);
   }
   function abrirEditar(u: UsuarioGestion) {
-    setForm({ email: u.email, nombre: u.nombre, apellidos: u.apellidos, empresaId: String(u.empresaId), centroId: u.centroId ? String(u.centroId) : "", rol: u.rol, activo: !!u.activo,
+    setForm({ email: u.email, emailCorporativo: u.emailCorporativo ?? "", nombre: u.nombre, apellidos: u.apellidos, empresaId: String(u.empresaId), centroId: u.centroId ? String(u.centroId) : "", rol: u.rol, activo: !!u.activo,
       tipoPerfil: u.tipoPerfil ?? "", departamentoId: u.departamentoId ? String(u.departamentoId) : "", managerId: u.managerId ? String(u.managerId) : "" });
     setEditando(u);
     setMensaje(null);
@@ -114,9 +114,18 @@ export default function GestionUsuarios() {
       {editando && (
         <form className="tarjeta" onSubmit={guardar}>
           <h3>{editando === "nuevo" ? "Nuevo usuario" : `Editar: ${editando.nombre} ${editando.apellidos}`}</h3>
-          <p className="nota">El email puede ser de cualquier dominio (Gmail, Outlook, corporativo…). No necesita cuenta de Microsoft.</p>
+          <p className="nota">
+            {editandoUsuario?.dni
+              ? <>Entra con su DNI/NIE <strong>{editandoUsuario.dni}</strong>. El email es para avisos.</>
+              : "Sin DNI/NIE: entra con su email. El email puede ser de cualquier dominio (Gmail, Outlook, corporativo…)."}
+          </p>
           <div className="rejilla">
-            <label>Email<input type="email" value={form.email} onChange={set("email")} required /></label>
+            <label>Email (avisos){!editandoUsuario?.dni && " y acceso"}<input type="email" value={form.email} onChange={set("email")} required /></label>
+            <label>
+              Correo profesional
+              <input type="email" value={form.emailCorporativo} onChange={set("emailCorporativo")} placeholder="nombre@arquisocial.es" />
+              <small className="nota">Si en a3 tiene un correo del grupo, se rellena solo.</small>
+            </label>
             <label>Nombre<input value={form.nombre} onChange={set("nombre")} required /></label>
             <label>Apellidos<input value={form.apellidos} onChange={set("apellidos")} required /></label>
             <label>

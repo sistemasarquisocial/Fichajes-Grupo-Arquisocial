@@ -41,10 +41,11 @@ export default function Login() {
           <label className="acceso-campo">
             <span>Usuario</span>
             <input
-              type="email"
-              inputMode="email"
+              type="text"
               autoComplete="username"
-              placeholder="Correo electrónico"
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="DNI/NIE"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -92,7 +93,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="acceso-nota">¿Es tu primera vez? <Link to="/primer-acceso">Primer acceso</Link></p>
+        <p className="acceso-nota">¿Es tu primera vez? Entra con tu DNI/NIE como usuario y como contraseña; después te pedirá crear una nueva.</p>
         <p className="acceso-nota">¿Has olvidado tu contraseña? Contacta con Sistemas.</p>
         {necesitaSetup && (
           <p className="acceso-nota"><Link to="/setup">Configuración inicial</Link></p>
