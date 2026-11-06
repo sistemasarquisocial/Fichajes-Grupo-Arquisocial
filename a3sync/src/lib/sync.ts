@@ -70,6 +70,7 @@ export async function sincronizar(completaPedida: boolean, log: Log): Promise<Es
   for (const cc of importadas.map((x) => x.codigoA3)) {
     try {
       est.centros += await leerCentros(cli, pool, cc, completa);
+      await volcarCentros(pool, cc, log);
       if (alcance === "CENTROS") continue;
       est.empleadosLeidos += await leerEmpleados(cli, pool, cc, completa, con.marcaEmpleados, hoy, log);
       leidas.add(cc);
@@ -192,6 +193,62 @@ async function leerCentros(cli: A3Cliente, pool: sql.ConnectionPool, cc: number,
       );
   });
   return lista.length;
+}
+
+/* ---------- 2a'. Centros de a3 → centros (servicios) de la app ----------
+   a3 es la fuente: cada centro de a3 es un centro de la app (1 a 1, campo CodigoA3 = «empresa-centro»).
+   - Nuevos: se crean con nombre, dirección, CP, ciudad y teléfono de a3; Estructura si el nombre contiene «ESTRUCTURA».
+     El código de servicio queda vacío (lo rellena Sistemas).
+   - Existentes: se actualizan nombre, dirección y alta/baja con lo que diga a3.
+   El volcado inicial está en el bloque 4 de db/011_centros_a3.sql. */
+export const SQL_VOLCAR_CENTROS = `
+DECLARE @emp INT = (SELECT EmpresaId FROM fich.A3Empresas WHERE CodigoA3 = @e AND Importar = 1);
+IF @emp IS NOT NULL
+BEGIN
+  DECLARE @nuevos TABLE (CentroA3 INT PRIMARY KEY, Nombre NVARCHAR(150));
+  INSERT INTO @nuevos (CentroA3, Nombre)
+  SELECT a.CentroA3,
+         CASE WHEN EXISTS (SELECT 1 FROM fich.Centros c WHERE c.EmpresaId = @emp AND LOWER(c.Nombre) = LOWER(a.Nombre))
+                OR COUNT(*) OVER (PARTITION BY LOWER(a.Nombre)) > 1
+              THEN LEFT(a.Nombre, 135) + N' (' + CAST(a.EmpresaA3 AS NVARCHAR(10)) + N'-' + CAST(a.CentroA3 AS NVARCHAR(10)) + N')'
+              ELSE a.Nombre END
+    FROM fich.A3Centros a
+   WHERE a.EmpresaA3 = @e AND a.Activo = 1 AND a.CentroId IS NULL
+     AND NOT EXISTS (SELECT 1 FROM fich.Centros c WHERE c.CodigoA3 = CAST(a.EmpresaA3 AS VARCHAR(10)) + '-' + CAST(a.CentroA3 AS VARCHAR(10)));
+
+  INSERT INTO fich.Centros (EmpresaId, Nombre, Direccion, CodigoPostal, Ciudad, Telefono, CodigoA3, EsEstructura)
+  SELECT @emp, n.Nombre, a.Direccion,
+         CASE WHEN a.CodigoPostal LIKE '[0-9][0-9][0-9][0-9][0-9]' THEN a.CodigoPostal END,
+         a.Ciudad, LEFT(a.Telefono, 20),
+         CAST(a.EmpresaA3 AS VARCHAR(10)) + '-' + CAST(a.CentroA3 AS VARCHAR(10)),
+         CASE WHEN a.Nombre LIKE N'%ESTRUCTURA%' THEN 1 ELSE 0 END
+    FROM @nuevos n JOIN fich.A3Centros a ON a.EmpresaA3 = @e AND a.CentroA3 = n.CentroA3;
+
+  -- Enlace a3 → app por CodigoA3
+  UPDATE a SET CentroId = c.CentroId
+    FROM fich.A3Centros a
+    JOIN fich.Centros c ON c.CodigoA3 = CAST(a.EmpresaA3 AS VARCHAR(10)) + '-' + CAST(a.CentroA3 AS VARCHAR(10))
+   WHERE a.EmpresaA3 = @e AND (a.CentroId IS NULL OR a.CentroId <> c.CentroId);
+
+  -- a3 manda: nombre, dirección y alta/baja de los centros enlazados
+  UPDATE c SET Nombre = CASE WHEN EXISTS (SELECT 1 FROM fich.Centros o WHERE o.EmpresaId = c.EmpresaId AND o.CentroId <> c.CentroId AND LOWER(o.Nombre) = LOWER(a.Nombre))
+                             THEN c.Nombre ELSE a.Nombre END,
+               Direccion = COALESCE(a.Direccion, c.Direccion),
+               CodigoPostal = COALESCE(CASE WHEN a.CodigoPostal LIKE '[0-9][0-9][0-9][0-9][0-9]' THEN a.CodigoPostal END, c.CodigoPostal),
+               Ciudad = COALESCE(a.Ciudad, c.Ciudad),
+               Telefono = COALESCE(LEFT(a.Telefono, 20), c.Telefono),
+               Activo = a.Activo
+    FROM fich.Centros c
+    JOIN fich.A3Centros a ON a.CentroId = c.CentroId AND a.EmpresaA3 = @e;
+
+  SELECT COUNT(*) AS creados FROM @nuevos;
+END
+ELSE SELECT 0 AS creados;`;
+
+async function volcarCentros(pool: sql.ConnectionPool, cc: number, log: Log) {
+  const r = await pool.request().input("e", sql.Int, cc).query(SQL_VOLCAR_CENTROS);
+  const n = r.recordset?.[0]?.creados ?? 0;
+  if (n) log(`Empresa ${cc}: ${n} centros creados en la app`);
 }
 
 /* ---------- 2b. Trabajadores ---------- */
