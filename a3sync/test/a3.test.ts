@@ -221,7 +221,7 @@ test("dominios corporativos para el correo profesional", async () => {
   const { dominiosCorporativos } = await import("../src/lib/sync");
   const antes = process.env.A3_DOMINIOS_CORPORATIVOS;
   delete process.env.A3_DOMINIOS_CORPORATIVOS;
-  assert.deepEqual(dominiosCorporativos(), ["arquisocial.es"]);
+  assert.deepEqual(dominiosCorporativos(), ["arquisocial.es", "grupoarquisocial.es", "sanivida.es", "servaria.es", "fepas.org", "azvase.com"]);
   process.env.A3_DOMINIOS_CORPORATIVOS = " @Arquisocial.es, ejemplo.org ,mal";
   assert.deepEqual(dominiosCorporativos(), ["arquisocial.es", "ejemplo.org"]);
   if (antes === undefined) delete process.env.A3_DOMINIOS_CORPORATIVOS; else process.env.A3_DOMINIOS_CORPORATIVOS = antes;
