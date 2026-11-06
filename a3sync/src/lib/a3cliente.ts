@@ -15,6 +15,8 @@ export interface OpcionesCliente {
   base?: string;
   /** Llamadas por segundo como máximo (por defecto 30 ≈ 1.800/min, por debajo del límite). */
   porSegundo?: number;
+  /** Tope de llamadas por sincronización: al alcanzarlo se para con error (protege el cupo diario de Conectia). */
+  maxLlamadas?: number;
   espera?: (ms: number) => Promise<void>;
 }
 
@@ -56,6 +58,8 @@ export class A3Cliente {
     const url = this.base + ruta + (qs ? `?${qs}` : "");
     let reintento401 = false;
     for (let intento = 1; ; intento++) {
+      if (this.o.maxLlamadas && this.llamadas >= this.o.maxLlamadas)
+        throw new ErrorA3(0, `Sincronización parada: se alcanzó el tope de ${this.o.maxLlamadas} llamadas a a3 (A3_MAX_LLAMADAS)`);
       await this.turno();
       this.llamadas++;
       let resp: Response;

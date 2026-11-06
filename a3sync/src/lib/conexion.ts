@@ -71,5 +71,6 @@ export async function crearCliente(): Promise<A3Cliente> {
   const apikey = await leerSecreto(SECRETO_APIKEY);
   if (!apikey) throw new ConexionNoDisponible(`Falta el secreto ${SECRETO_APIKEY} en Key Vault`);
   await tokenAcceso(); // falla pronto si la conexión no vale
-  return new A3Cliente({ apikey, token: tokenAcceso, invalidarToken });
+  const max = Number(process.env.A3_MAX_LLAMADAS);
+  return new A3Cliente({ apikey, token: tokenAcceso, invalidarToken, maxLlamadas: Number.isInteger(max) && max > 0 ? max : 40000 });
 }
