@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, Centro, Departamento, Empresa, Rol, ROLES, ETIQUETA_ROL, ETIQUETA_PERFIL, TipoPerfil, UsuarioGestion, generarPasswordTemporal } from "../api";
 import SelectorPersona from "../components/SelectorPersona";
 import ListadoUsuarios from "../components/ListadoUsuarios";
+import Modal from "../components/Modal";
 
 const VACIO = {
   email: "", emailCorporativo: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
@@ -112,8 +113,8 @@ export default function GestionUsuarios() {
       </div>
 
       {editando && (
-        <form className="tarjeta" onSubmit={guardar}>
-          <h3>{editando === "nuevo" ? "Nuevo usuario" : `Editar: ${editando.nombre} ${editando.apellidos}`}</h3>
+        <Modal titulo={editando === "nuevo" ? "Nuevo usuario" : `Editar: ${editando.nombre} ${editando.apellidos}`} onCerrar={() => setEditando(null)} ancho>
+        <form className="form-modal" onSubmit={guardar}>
           <p className="nota">
             {editandoUsuario?.dni
               ? <>Entra con su DNI/NIE <strong>{editandoUsuario.dni}</strong>. El email es para avisos.</>
@@ -202,11 +203,13 @@ export default function GestionUsuarios() {
           {editando === "nuevo" && (
             <p className="nota">Contraseña temporal generada: <code>{pwTemporal}</code> <button type="button" className="btn-link" onClick={() => setPwTemporal(generarPasswordTemporal())}>Generar otra</button></p>
           )}
-          <div className="acciones-form">
-            <button className="btn btn-primario">Guardar</button>
+          {mensaje?.tipo === "error" && <p className="error" role="alert">{mensaje.texto}</p>}
+          <div className="modal-acciones">
             <button type="button" className="btn btn-secundario" onClick={() => setEditando(null)}>Cancelar</button>
+            <button className="btn btn-primario">Guardar</button>
           </div>
         </form>
+        </Modal>
       )}
 
       {usuarios === null ? (
