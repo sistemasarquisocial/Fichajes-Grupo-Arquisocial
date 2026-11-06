@@ -492,3 +492,22 @@ body:has(.admin) .cabecera-int { max-width: 1480px; }
 .tabla td.responsables { min-width: 190px; }
 .admin .tabla th, .admin .tabla td { padding: 10px 12px; }
 .admin .tabla .acciones-fila .btn-link { margin: 0 0 3px; padding: 1px 0; line-height: 1.35; font-size: 0.86rem; }
+
+/* ===== Selector de persona con buscador ===== */
+.selector-persona { position: relative; }
+.selector-persona input { width: 100%; padding-right: 34px; }
+.selector-persona-quitar {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border: none; border-radius: 50%;
+  background: transparent; color: var(--texto-suave); font-size: 1.1rem; line-height: 1; cursor: pointer;
+}
+.selector-persona-quitar:hover { background: var(--verde-claro); color: var(--verde-oscuro); }
+.selector-persona-lista {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 280px; overflow-y: auto; margin: 0; padding: 4px;
+  list-style: none; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; box-shadow: var(--sombra);
+}
+.selector-persona-lista li { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 400; color: var(--texto); }
+.selector-persona-lista li small { color: var(--texto-suave); font-size: 0.78rem; }
+.selector-persona-lista li.activo { background: var(--verde-claro); }
+.selector-persona-lista li.elegido span { font-weight: 700; }
+.selector-persona-lista li.vacio { color: var(--texto-suave); font-style: italic; }
+.selector-persona-lista li.sin-resultados { cursor: default; color: var(--texto-suave); font-size: 0.82rem; }
