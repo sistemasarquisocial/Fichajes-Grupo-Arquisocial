@@ -231,7 +231,9 @@ BEGIN
    WHERE a.EmpresaA3 = @e AND (a.CentroId IS NULL OR a.CentroId <> c.CentroId);
 
   -- a3 manda: nombre, dirección y alta/baja de los centros enlazados
+  -- (si el nombre de a3 se repite en la empresa, se conserva el nombre con sufijo «(empresa-centro)»)
   UPDATE c SET Nombre = CASE WHEN EXISTS (SELECT 1 FROM fich.Centros o WHERE o.EmpresaId = c.EmpresaId AND o.CentroId <> c.CentroId AND LOWER(o.Nombre) = LOWER(a.Nombre))
+                               OR EXISTS (SELECT 1 FROM fich.A3Centros a2 WHERE a2.EmpresaA3 = a.EmpresaA3 AND a2.CentroA3 <> a.CentroA3 AND LOWER(a2.Nombre) = LOWER(a.Nombre))
                              THEN c.Nombre ELSE a.Nombre END,
                Direccion = COALESCE(a.Direccion, c.Direccion),
                CodigoPostal = COALESCE(CASE WHEN a.CodigoPostal LIKE '[0-9][0-9][0-9][0-9][0-9]' THEN a.CodigoPostal END, c.CodigoPostal),
