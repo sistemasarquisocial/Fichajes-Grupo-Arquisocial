@@ -142,15 +142,28 @@ export type ResultadoLogin =
   | { ok: true; token: string; usuario: UsuarioSesion }
   | { ok: false; motivo: "credenciales" | "bloqueado" };
 
-export async function login(email: string, password: string, recordar = false): Promise<ResultadoLogin> {
+/** El usuario entra con su DNI/NIE o con su email (administradores sin DNI). */
+export function esEmail(identificador: string) {
+  return identificador.includes("@");
+}
+
+/** DNI/NIE tapado para el registro de auditoría: «***5678Z». */
+export function ocultarIdentificador(identificador: string) {
+  const s = String(identificador ?? "").trim().slice(0, 254);
+  return esEmail(s) ? s : `***${normDni(s).slice(-5)}`;
+}
+
+export async function login(identificador: string, password: string, recordar = false): Promise<ResultadoLogin> {
   const pool = await getPool();
+  const porEmail = esEmail(identificador);
   const r = await pool
     .request()
-    .input("email", sql.NVarChar(254), email.trim().toLowerCase())
+    .input("email", sql.NVarChar(254), identificador.trim().toLowerCase())
+    .input("dni", sql.VarChar(12), normDni(identificador))
     .query(
-      `SELECT UsuarioId, Email, Nombre, Apellidos, Rol, EmpresaId, PasswordHash, DebeCambiarPassword,
+      `SELECT UsuarioId, Email, Nombre, Apellidos, Rol, EmpresaId, PasswordHash, DebeCambiarPassword, DNI,
               Activo, IntentosFallidos, BloqueadoHastaUtc, VersionSesion
-         FROM fich.Usuarios WHERE EmailNormalizado = @email`
+         FROM fich.Usuarios WHERE ${porEmail ? "EmailNormalizado = @email" : "DNI = @dni"}`
     );
   const u = r.recordset[0];
 
@@ -162,8 +175,11 @@ export async function login(email: string, password: string, recordar = false): 
     return { ok: false, motivo: "bloqueado" };
   }
 
-  // Usuarios importados de a3 sin contraseña: deben usar «Primer acceso»
-  const valido = u.PasswordHash ? await bcrypt.compare(password, u.PasswordHash) : (await bcrypt.compare(password, getHashFicticio()), false);
+  // Primer acceso (importados de a3, sin contraseña): la contraseña inicial es su DNI/NIE; después debe cambiarla
+  const primeraVez = !u.PasswordHash && !!u.DNI;
+  const valido = u.PasswordHash
+    ? await bcrypt.compare(password, u.PasswordHash)
+    : (await bcrypt.compare(password, getHashFicticio()), primeraVez && normDni(password) === u.DNI);
   if (!valido) {
     await pool
       .request()
@@ -179,13 +195,26 @@ export async function login(email: string, password: string, recordar = false): 
     return { ok: false, motivo: "credenciales" };
   }
 
-  await pool
-    .request()
-    .input("id", sql.Int, u.UsuarioId)
-    .query(
-      `UPDATE fich.Usuarios SET IntentosFallidos = 0, BloqueadoHastaUtc = NULL, UltimoAccesoUtc = SYSUTCDATETIME()
-        WHERE UsuarioId = @id`
-    );
+  if (primeraVez) {
+    // Se guarda el DNI como contraseña temporal para que el cambio obligatorio funcione como con cualquier temporal
+    await pool
+      .request()
+      .input("id", sql.Int, u.UsuarioId)
+      .input("hash", sql.VarChar(255), await hashPassword(normDni(password)))
+      .query(
+        `UPDATE fich.Usuarios SET PasswordHash = @hash, DebeCambiarPassword = 1, PrimerAccesoUtc = SYSUTCDATETIME(),
+                IntentosFallidos = 0, BloqueadoHastaUtc = NULL, UltimoAccesoUtc = SYSUTCDATETIME(), ModificadoUtc = SYSUTCDATETIME()
+          WHERE UsuarioId = @id AND PasswordHash IS NULL`
+      );
+  } else {
+    await pool
+      .request()
+      .input("id", sql.Int, u.UsuarioId)
+      .query(
+        `UPDATE fich.Usuarios SET IntentosFallidos = 0, BloqueadoHastaUtc = NULL, UltimoAccesoUtc = SYSUTCDATETIME()
+          WHERE UsuarioId = @id`
+      );
+  }
 
   return {
     ok: true,
@@ -197,7 +226,7 @@ export async function login(email: string, password: string, recordar = false): 
       apellidos: u.Apellidos,
       rol: u.Rol,
       empresaId: u.EmpresaId,
-      debeCambiarPassword: !!u.DebeCambiarPassword,
+      debeCambiarPassword: primeraVez || !!u.DebeCambiarPassword,
     },
   };
 }
