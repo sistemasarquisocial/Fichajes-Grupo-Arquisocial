@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, ApiError, Centro, Departamento, Empresa, Rol, ROLES, ETIQUETA_ROL, ETIQUETA_PERFIL, TipoPerfil, UsuarioGestion, generarPasswordTemporal } from "../api";
+import SelectorPersona from "../components/SelectorPersona";
 
 const VACIO = {
   email: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
@@ -152,10 +153,12 @@ export default function GestionUsuarios() {
                 </label>
                 <label>
                   Manager (solo si dirige un departamento)
-                  <select value={form.managerId} onChange={set("managerId")}>
-                    <option value="">(Ninguno · CEO)</option>
-                    {candidatosManager.map((u) => <option key={u.id} value={u.id}>{u.nombre} {u.apellidos}</option>)}
-                  </select>
+                  <SelectorPersona
+                    personas={candidatosManager.map((u) => ({ id: u.id, nombre: `${u.nombre} ${u.apellidos}`, detalle: u.departamento ?? u.centro }))}
+                    valor={form.managerId}
+                    onCambio={(v) => setForm({ ...form, managerId: v })}
+                    vacio="Ninguno · CEO"
+                  />
                   <small className="nota">Le aprueba esta persona cuando es manager de un departamento o no tiene departamento. Si no, le aprueba el manager de su departamento.</small>
                 </label>
                 <label>

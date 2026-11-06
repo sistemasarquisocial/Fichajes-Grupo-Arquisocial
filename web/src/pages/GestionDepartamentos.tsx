@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, ApiError, Departamento, UsuarioGestion } from "../api";
 import Modal from "../components/Modal";
+import SelectorPersona from "../components/SelectorPersona";
 
 type Mensaje = { tipo: "exito" | "error"; texto: string } | null;
 
@@ -160,10 +161,12 @@ function EditarDepartamento({ dep, deps, usuarios, onCerrar, onGuardado }: {
         </label>
         <label>
           Manager
-          <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-            <option value="">(Sin manager)</option>
-            {activos.map((u) => <option key={u.id} value={u.id}>{u.nombre} {u.apellidos}</option>)}
-          </select>
+          <SelectorPersona
+            personas={activos.map((u) => ({ id: u.id, nombre: `${u.nombre} ${u.apellidos}`, detalle: u.departamento ?? u.centro }))}
+            valor={managerId}
+            onCambio={setManagerId}
+            vacio="Sin manager"
+          />
         </label>
         <p className="nota">El manager aprueba a las personas de estructura de este departamento. A él le aprueba el manager indicado en su ficha de usuario.</p>
         {error && <p className="error" role="alert">{error}</p>}
