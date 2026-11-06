@@ -82,6 +82,8 @@ export interface UsuarioGestion {
   aprobador: string | null; suplente: string | null; esCoordinador: boolean; esManagerDepartamento: boolean;
   rol: Rol; activo: boolean; debeCambiarPassword: boolean; bloqueado: number;
   ultimoAccesoUtc: string | null; creadoUtc: string;
+  /** Correo profesional del grupo (de a3 si es corporativo, o puesto a mano) y DNI/NIE (usuario de acceso). */
+  emailCorporativo: string | null; dni: string | null;
   /** Estado automático: BAJA si está desactivado o ya pasó su fecha de baja de a3. */
   estado: EstadoUsuario;
   centroA3: string | null; empresaA3: number | null; empleadoA3: string | null; origenA3: boolean;
@@ -293,8 +295,9 @@ export const api = {
   setup: (d: { setupKey: string; email: string; nombre: string; apellidos: string; empresaId: number; password: string }) => llamar("POST", "setup", d),
   empresas: () => llamar<Empresa[]>("GET", "empresas"),
 
-  login: (email: string, password: string, recordar = false) =>
-    llamar<{ usuario: Usuario }>("POST", "auth/login", { email, password, recordar }),
+  /** usuario: DNI/NIE o email. */
+  login: (usuario: string, password: string, recordar = false) =>
+    llamar<{ usuario: Usuario }>("POST", "auth/login", { usuario, password, recordar }),
   primerAcceso: (email: string, dni: string, password: string) => llamar<{ usuario: Usuario }>("POST", "auth/primer-acceso", { email, dni, password }),
   logout: () => llamar("POST", "auth/logout"),
 
