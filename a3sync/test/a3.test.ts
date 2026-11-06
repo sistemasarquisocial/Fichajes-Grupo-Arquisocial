@@ -193,3 +193,13 @@ test("alcance de la sincronización: por defecto solo empresas", async () => {
   assert.equal(empresasLimitadas(" , x"), null);
   assert.deepEqual([...(empresasLimitadas("355, 1 ,356") ?? [])], [355, 1, 356]);
 });
+
+/* ---------- Tope de llamadas ---------- */
+test("el cliente se para al llegar al tope de llamadas", async () => {
+  const f = (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch;
+  const cli = new A3Cliente({ apikey: "k", token: async () => "t", invalidarToken: () => {}, fetch: f, porSegundo: 1000, maxLlamadas: 2, espera: async () => {} });
+  await cli.get("/a");
+  await cli.get("/b");
+  await assert.rejects(cli.get("/c"), /tope de 2 llamadas/);
+  assert.equal(cli.llamadas, 2);
+});
