@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normDni, dniValido, fechaA3, partirNombre, direccionCentro, aplanarOrganigrama, normEmail } from "../src/lib/normalizar";
+import { normDni, dniValido, fechaA3, partirNombre, direccionCentro, aplanarOrganigrama, normEmail, fichaPuesto, fichaContrato } from "../src/lib/normalizar";
 import { conciliar, EntradaConciliacion, RegistroA3, UsuarioApp } from "../src/lib/conciliar";
 import { A3Cliente, enParalelo } from "../src/lib/a3cliente";
 import { urlAutorizacion, usuarioDeTokens } from "../src/lib/oauth";
@@ -21,6 +21,19 @@ test("normalización de datos de a3", () => {
   assert.equal(direccionCentro({ acronym: "Calle", streetName: "RIO SAN PEDRO", buildingNumber: "6", stairWell: "", floor: "", gate: "Bajo" }), "Calle RIO SAN PEDRO 6, Bajo");
   assert.equal(normEmail(" Ana.Perez@Arquisocial.ES "), "ana.perez@arquisocial.es");
   assert.equal(normEmail("sin-arroba"), null);
+});
+
+test("ficha laboral: puesto, responsable y contrato (sin salario)", () => {
+  const pu = fichaPuesto({ jobCode: "AUX01", jobTitle: " Auxiliar  de ayuda a domicilio ", department: "Servicios", organizationalUnit: "Zona Norte",
+    responsibleTo: "RUIZ MARTIN, PABLO", responsibleToCode: "000045", fte: 0.75, startDate: "2024-03-01T00:00:00Z", endDate: "0001-01-01T00:00:00Z" });
+  assert.deepEqual(pu, { puestoCodigo: "AUX01", puesto: "Auxiliar de ayuda a domicilio", departamento: "Servicios", unidadOrganizativa: "Zona Norte",
+    responsableCodigo: "000045", responsableNombre: "RUIZ MARTIN, PABLO", jornada: 0.75, puestoDesde: "2024-03-01" });
+  assert.equal(fichaPuesto(null).puesto, null);
+  assert.equal(fichaPuesto({ fte: null }).jornada, null);
+  const co = fichaContrato({ contractCode: "189", contractDescription: "Indefinido tiempo completo", labourPeriodStartDate: "2024-03-01T00:00:00Z",
+    labourPeriodEndDate: "0001-01-01T00:00:00Z", contributionType: "Normal", annualGrossAmount: 20000 });
+  assert.deepEqual(co, { contratoCodigo: "189", contrato: "Indefinido tiempo completo", contratoDesde: "2024-03-01", contratoHasta: null, tipoCotizacion: "Normal" });
+  assert.equal(JSON.stringify(co).includes("20000"), false);
 });
 
 test("organigrama: árbol → filas con padre", () => {
