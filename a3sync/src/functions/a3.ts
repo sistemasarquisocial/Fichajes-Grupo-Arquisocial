@@ -72,9 +72,24 @@ app.http("a3Callback", {
   },
 });
 
+/** Estado automático: quien tiene fecha de baja de a3 ya pasada (hora de España) queda de baja aunque no haya
+    sincronización ese día. Si a3 lo vuelve a dar de alta, la sincronización lo reactiva. */
+export const SQL_BAJAS_VENCIDAS = `
+UPDATE fich.Usuarios SET Activo = 0, DesactivadoPorA3 = 1
+OUTPUT INSERTED.UsuarioId AS id
+ WHERE Activo = 1 AND OrigenA3 = 1 AND FechaBajaA3 IS NOT NULL
+   AND FechaBajaA3 < CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'Romance Standard Time' AS DATE);`;
+
+async function aplicarBajasVencidas(pool: Awaited<ReturnType<typeof getPool>>, ctx: InvocationContext) {
+  const r = await pool.request().query(SQL_BAJAS_VENCIDAS);
+  for (const x of r.recordset) await auditar(pool, "A3_BAJA_FECHA", "Usuario", x.id, "Baja automática: ha pasado su fecha de baja en a3", null);
+  if (r.recordset.length) ctx.log(`[a3] ${r.recordset.length} usuario(s) de baja por fecha`);
+}
+
 /** Toma la siguiente sincronización pendiente (si no hay otra en curso) y la ejecuta. */
 async function atenderSolicitud(ctx: InvocationContext) {
   const pool = await getPool();
+  await aplicarBajasVencidas(pool, ctx).catch((e) => ctx.error(e));
   await pool
     .request()
     .input("h", sql.Int, MAX_EN_CURSO_H)
