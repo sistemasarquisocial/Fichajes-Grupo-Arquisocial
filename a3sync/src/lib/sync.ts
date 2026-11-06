@@ -646,10 +646,11 @@ export async function auditar(pool: sql.ConnectionPool, accion: string, entidad:
 }
 
 /* ---------- 4. Correo profesional (corporativo) ----------
-   Si el email profesional de a3 es de un dominio del grupo (A3_DOMINIOS_CORPORATIVOS, por defecto arquisocial.es),
+   Si el email profesional de a3 es de un dominio del grupo (A3_DOMINIOS_CORPORATIVOS; por defecto los del grupo, DOMINIOS_GRUPO),
    se copia a fich.Usuarios.EmailCorporativo. Si a3 no lo tiene, se respeta el que se haya puesto a mano. */
+export const DOMINIOS_GRUPO = "arquisocial.es,grupoarquisocial.es,sanivida.es,servaria.es,fepas.org,azvase.com";
 export function dominiosCorporativos(): string[] {
-  const v = (process.env.A3_DOMINIOS_CORPORATIVOS ?? "arquisocial.es").toLowerCase();
+  const v = (process.env.A3_DOMINIOS_CORPORATIVOS ?? DOMINIOS_GRUPO).toLowerCase();
   return v.split(",").map((d) => d.trim().replace(/^@/, "")).filter((d) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d));
 }
 
