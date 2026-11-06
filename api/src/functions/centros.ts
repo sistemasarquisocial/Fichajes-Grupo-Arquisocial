@@ -80,7 +80,7 @@ app.http("gestionCentrosListar", {
     async () => {
       const pool = await getPool();
       const r = await pool.request().query(
-        `SELECT c.CentroId AS id, c.CodigoServicio AS codigoServicio, c.Nombre AS nombre, c.EmpresaId AS empresaId, e.Nombre AS empresa,
+        `SELECT c.CentroId AS id, c.CodigoServicio AS codigoServicio, c.CodigoA3 AS codigoA3, c.EsEstructura AS esEstructura, c.Nombre AS nombre, c.EmpresaId AS empresaId, e.Nombre AS empresa,
                 c.Direccion AS direccion, c.CodigoPostal AS codigoPostal, c.Ciudad AS ciudad, c.Telefono AS telefono,
                 c.Activo AS activo, c.CreadoUtc AS creadoUtc,
                 c.CoordinadorId AS coordinadorId, CASE WHEN co.UsuarioId IS NULL THEN NULL ELSE co.Nombre + N' ' + co.Apellidos END AS coordinador,
@@ -95,7 +95,7 @@ app.http("gestionCentrosListar", {
       );
       return json(200, r.recordset.map((x: any) => {
         const cm = comunidadDeCP(x.codigoPostal);
-        return { ...x, activo: !!x.activo, comunidad: cm ? NOMBRE_COMUNIDAD[cm] : null };
+        return { ...x, activo: !!x.activo, esEstructura: !!x.esEstructura, comunidad: cm ? NOMBRE_COMUNIDAD[cm] : null };
       }));
     },
     { roles: GESTORES }
