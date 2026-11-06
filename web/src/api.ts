@@ -82,7 +82,15 @@ export interface UsuarioGestion {
   aprobador: string | null; suplente: string | null; esCoordinador: boolean; esManagerDepartamento: boolean;
   rol: Rol; activo: boolean; debeCambiarPassword: boolean; bloqueado: number;
   ultimoAccesoUtc: string | null; creadoUtc: string;
+  /** Estado automático: BAJA si está desactivado o ya pasó su fecha de baja de a3. */
+  estado: EstadoUsuario;
+  centroA3: string | null; empresaA3: number | null; empleadoA3: string | null; origenA3: boolean;
+  fechaAltaA3: string | null; fechaBajaA3: string | null;
+  puesto: string | null; departamentoA3: string | null; contrato: string | null; contratoCodigo: string | null; jornada: number | null;
+  /** Responsable según a3 (nombre) y su usuario en la app, si existe. */
+  responsableA3: string | null; responsableA3Id: number | null;
 }
+export type EstadoUsuario = "ALTA" | "BAJA_PROGRAMADA" | "BAJA";
 
 /* ---------- Mi equipo ---------- */
 export interface Departamento { id: number; nombre: string; activo: boolean; creadoUtc: string; managerId: number | null; manager: string | null; miembros: number }

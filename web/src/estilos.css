@@ -511,3 +511,25 @@ body:has(.admin) .cabecera-int { max-width: 1480px; }
 .selector-persona-lista li.elegido span { font-weight: 700; }
 .selector-persona-lista li.vacio { color: var(--texto-suave); font-style: italic; }
 .selector-persona-lista li.sin-resultados { cursor: default; color: var(--texto-suave); font-size: 0.82rem; }
+
+/* ---------- Usuarios: estados, filtros y árboles ---------- */
+.usuarios-estados { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 0; align-items: center; }
+.segmento { border: 1px solid var(--borde); background: #fff; color: var(--texto); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.88rem; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.segmento:hover { border-color: var(--verde-oscuro); }
+.segmento.activo { background: var(--verde-oscuro); border-color: var(--verde-oscuro); color: #fff; }
+.segmento-n { font-size: 0.78rem; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.usuarios-filtro-centro { min-width: 240px; }
+.arbol { list-style: none; margin: 0; padding: 0; }
+.arbol-raiz { padding: 8px 10px 14px; }
+.arbol-nodo { border-left: 2px solid transparent; }
+.arbol .arbol { margin-left: 18px; border-left: 2px solid var(--verde-claro); }
+.arbol-cabecera { width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; text-align: left; background: none; border: 0; border-radius: 8px; padding: 8px 10px; font: inherit; color: var(--texto); cursor: pointer; }
+.arbol-cabecera:hover, .arbol-cabecera:focus-visible { background: var(--verde-claro); outline: none; }
+.arbol-flecha { width: 14px; color: var(--verde-oscuro); }
+.arbol-titulo { font-weight: 600; }
+.nivel-0 > .arbol-cabecera .arbol-titulo { font-weight: 700; color: var(--verde-oscuro); }
+.arbol-total { margin-left: auto; }
+.arbol-contenido { padding: 0 0 6px 18px; }
+.arbol-contenido > .tabla { margin: 4px 0 8px; }
+.usuarios-barra { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 18px; }
+.usuarios-estados .nota { align-self: center; }
