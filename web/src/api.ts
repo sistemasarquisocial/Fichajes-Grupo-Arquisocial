@@ -64,7 +64,7 @@ export interface DatosExportacion {
 export interface Empresa { id: number; nombre: string }
 export interface EmpresaGestion { id: number; nombre: string; activa: boolean; creadoUtc: string; centros: number; usuariosActivos: number }
 export interface Centro {
-  id: number; codigoServicio: string | null; nombre: string; empresaId: number; empresa: string;
+  id: number; codigoServicio: string | null; codigoA3: string | null; esEstructura: boolean; nombre: string; empresaId: number; empresa: string;
   direccion: string | null; codigoPostal: string | null; ciudad: string | null; telefono: string | null;
   activo: boolean; creadoUtc: string; usuariosActivos: number;
   coordinadorId: number | null; coordinador: string | null; gestorId: number | null; gestor: string | null;
