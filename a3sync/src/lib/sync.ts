@@ -90,6 +90,7 @@ export async function sincronizar(completaPedida: boolean, log: Log): Promise<Es
 
   // 3. Conciliación
   await aplicarConciliacion(pool, hoy, leidas, est, log);
+  await correoCorporativo(pool, log);
 
   if (!est.errores.length) {
     await pool
@@ -644,3 +645,26 @@ export async function auditar(pool: sql.ConnectionPool, accion: string, entidad:
     .query("INSERT INTO fich.Auditoria (ActorUsuarioId, Accion, Entidad, EntidadId, Detalle, IpOrigen) VALUES (@actor, @accion, @entidad, @id, @detalle, NULL)");
 }
 
+/* ---------- 4. Correo profesional (corporativo) ----------
+   Si el email profesional de a3 es de un dominio del grupo (A3_DOMINIOS_CORPORATIVOS, por defecto arquisocial.es),
+   se copia a fich.Usuarios.EmailCorporativo. Si a3 no lo tiene, se respeta el que se haya puesto a mano. */
+export function dominiosCorporativos(): string[] {
+  const v = (process.env.A3_DOMINIOS_CORPORATIVOS ?? "arquisocial.es").toLowerCase();
+  return v.split(",").map((d) => d.trim().replace(/^@/, "")).filter((d) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d));
+}
+
+export const SQL_CORREO_CORPORATIVO = `
+UPDATE u SET EmailCorporativo = LOWER(LTRIM(RTRIM(ae.EmailProfesional))), ModificadoUtc = SYSUTCDATETIME()
+  FROM fich.Usuarios u
+  JOIN fich.A3Empleados ae ON ae.EmpresaA3 = u.EmpresaA3 AND ae.EmpleadoA3 = u.EmpleadoA3
+ WHERE ae.EmailProfesional LIKE '%@%'
+   AND LOWER(SUBSTRING(LTRIM(RTRIM(ae.EmailProfesional)), CHARINDEX('@', LTRIM(RTRIM(ae.EmailProfesional))) + 1, 254))
+       IN (SELECT LTRIM(RTRIM(value)) FROM STRING_SPLIT(@dominios, ','))
+   AND (u.EmailCorporativo IS NULL OR u.EmailCorporativo <> LOWER(LTRIM(RTRIM(ae.EmailProfesional))));`;
+
+async function correoCorporativo(pool: sql.ConnectionPool, log: Log) {
+  const dominios = dominiosCorporativos();
+  if (!dominios.length) return;
+  const r = await pool.request().input("dominios", sql.NVarChar(1000), dominios.join(",")).query(SQL_CORREO_CORPORATIVO);
+  if (r.rowsAffected[0]) log(`Correo profesional: ${r.rowsAffected[0]} usuario(s) actualizados`);
+}
