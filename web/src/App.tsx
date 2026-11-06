@@ -50,9 +50,9 @@ export default function App() {
     <div className="app">
       <header className="cabecera">
         <div className="cabecera-int">
-          <NavLink to="/" className="marca" aria-label="Fichajes · Grupo Arquisocial">
+          <NavLink to="/" className="marca" aria-label="Registro de Jornada · Grupo Arquisocial">
             <img src="/mariposa.svg" alt="" width={30} height={28} />
-            <span className="marca-texto">Fichajes</span>
+            <span className="marca-texto">Registro de Jornada</span>
           </NavLink>
           <nav className="nav" aria-label="Principal">
             <NavLink to="/" end>Fichar</NavLink>

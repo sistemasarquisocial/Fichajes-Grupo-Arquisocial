@@ -42,7 +42,7 @@ code { background: var(--verde-claro); padding: 2px 6px; border-radius: 6px; fon
 }
 .marca { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff9dc; }
 .marca img { display: block; height: 28px; width: auto; }
-.marca-texto { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.marca-texto { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; }
 .marca-grande { margin-bottom: 8px; }
 .marca-grande h1 { margin: 0; }
 .nav { display: flex; gap: 26px; margin-left: auto; align-items: center; }
