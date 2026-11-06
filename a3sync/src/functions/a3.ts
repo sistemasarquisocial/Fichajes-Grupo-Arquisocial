@@ -7,7 +7,8 @@ import { sincronizar, auditar } from "../lib/sync";
 /* Funciones del conector a3:
    - a3/callback (HTTP): vuelta del login de Wolters Kluwer tras «Conectar con a3» en la app.
    - solicitudes (cada 5 min): atiende las sincronizaciones pedidas desde la app.
-   - nocturna (01:30 UTC ≈ 02:30 en invierno / 03:30 en verano): sincronización diaria; los domingos, completa. */
+   - nocturna (01:30 UTC ≈ 02:30 en invierno / 03:30 en verano): solo cambios (altas, bajas y modificaciones desde
+     la última sincronización correcta). La completa solo se lanza a mano desde la app. */
 
 const MAX_STATE_MIN = 15;
 const MAX_EN_CURSO_H = 3;
@@ -142,10 +143,9 @@ app.timer("a3Nocturna", {
       ctx.warn(`Sincronización nocturna omitida: conexión ${con.estado}`);
       return;
     }
-    const domingo = new Date().getUTCDay() === 0;
     await pool
       .request()
-      .input("c", sql.Bit, domingo)
+      .input("c", sql.Bit, false)
       .query(
         `IF NOT EXISTS (SELECT 1 FROM fich.A3Sincronizaciones WHERE Estado IN ('PENDIENTE','EN_CURSO'))
          INSERT INTO fich.A3Sincronizaciones (Tipo, Completa) VALUES ('NOCTURNA', @c)`
