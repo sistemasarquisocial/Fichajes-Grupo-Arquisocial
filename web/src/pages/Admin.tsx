@@ -75,7 +75,7 @@ export default function Admin() {
           </NavLink>
           <NavLink to="centros">
             <IconoCentros />
-            <span><strong>Gestión de centros</strong><small>Delegaciones, coordinador y gestor</small></span>
+            <span><strong>Gestión de centros</strong><small>Delegaciones, filtros y responsables</small></span>
           </NavLink>
           <NavLink to="empresas">
             <IconoEmpresas />
