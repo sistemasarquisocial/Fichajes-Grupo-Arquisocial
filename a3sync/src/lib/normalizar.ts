@@ -119,3 +119,58 @@ export interface NodoOrganigrama {
   fechaBaja: string | null;
   orden: number;
 }
+
+/* ---------- Ficha laboral (puesto, responsable y contrato) ---------- */
+const txt = (v: unknown, max: number): string | null => {
+  const s = String(v ?? "").replace(/\s+/g, " ").trim();
+  return s ? s.slice(0, max) : null;
+};
+
+export interface FichaPuesto {
+  puestoCodigo: string | null;
+  puesto: string | null;
+  departamento: string | null;
+  unidadOrganizativa: string | null;
+  responsableCodigo: string | null;
+  responsableNombre: string | null;
+  jornada: number | null;
+  puestoDesde: string | null;
+}
+
+/** /employees/{ec}/jobPositionInformation → puesto, departamento, responsable (manager) y % de jornada. */
+export function fichaPuesto(x: any): FichaPuesto {
+  const p = Array.isArray(x) ? x[0] : x;
+  const fte = Number(p?.fte);
+  const resp = txt(p?.responsibleToCode, 20);
+  return {
+    puestoCodigo: txt(p?.jobCode, 20),
+    puesto: txt(p?.jobTitle, 150),
+    departamento: txt(p?.department, 150),
+    unidadOrganizativa: txt(p?.organizationalUnit, 150),
+    // Código de trabajador a3 del responsable (se enlaza en la app ignorando ceros a la izquierda)
+    responsableCodigo: resp,
+    responsableNombre: txt(p?.responsibleTo, 200),
+    jornada: p?.fte === null || p?.fte === undefined || isNaN(fte) ? null : Math.round(fte * 100) / 100,
+    puestoDesde: fechaA3(p?.startDate),
+  };
+}
+
+export interface FichaContrato {
+  contratoCodigo: string | null;
+  contrato: string | null;
+  contratoDesde: string | null;
+  contratoHasta: string | null;
+  tipoCotizacion: string | null;
+}
+
+/** /employees/{ec}/contract-agreement → contrato vigente. No se guarda el salario (annualGross*). */
+export function fichaContrato(x: any): FichaContrato {
+  const c = Array.isArray(x) ? x[0] : x;
+  return {
+    contratoCodigo: txt(c?.contractCode, 10),
+    contrato: txt(c?.contractDescription, 200),
+    contratoDesde: fechaA3(c?.labourPeriodStartDate),
+    contratoHasta: fechaA3(c?.labourPeriodEndDate),
+    tipoCotizacion: txt(c?.contributionType, 100),
+  };
+}

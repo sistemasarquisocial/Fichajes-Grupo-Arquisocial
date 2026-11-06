@@ -1,7 +1,7 @@
 import { getPool, sql } from "./infra";
 import { A3Cliente, ErrorA3, enParalelo } from "./a3cliente";
 import { crearCliente, leerConexion } from "./conexion";
-import { normDni, partirNombre, fechaA3, fechaHoraA3, direccionCentro, aplanarOrganigrama } from "./normalizar";
+import { normDni, partirNombre, fechaA3, fechaHoraA3, direccionCentro, aplanarOrganigrama, fichaPuesto, fichaContrato, FichaPuesto, FichaContrato } from "./normalizar";
 import { conciliar, enAlta, RegistroA3, UsuarioApp, Pendiente, Campos } from "./conciliar";
 
 /* Sincronización a3 → app. Una ejecución:
@@ -256,8 +256,14 @@ async function volcarCentros(pool: sql.ConnectionPool, cc: number, log: Log) {
 /* ---------- 2b. Trabajadores ---------- */
 async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: number, completa: boolean, marca: string | null, hoy: string, log: Log): Promise<number> {
   const ruta = `/api/companies/${cc}/employees`;
+  // Si hay trabajadores en alta sin ficha laboral (p. ej. tras añadir los campos de puesto y contrato), se lee el
+  // listado entero una vez para completarlas; después la nocturna vuelve a pedir solo los cambios.
+  const sinFicha = await pool.request().input("e", sql.Int, cc).input("hoy", sql.VarChar(10), hoy).query(
+    "SELECT COUNT(*) AS n FROM fich.A3Empleados WHERE EmpresaA3 = @e AND FichaLeidaUtc IS NULL AND (FechaBaja IS NULL OR FechaBaja >= CAST(@hoy AS DATE))"
+  );
+  const completarFichas = (sinFicha.recordset[0]?.n ?? 0) > 0;
   let lista: any[];
-  if (!completa && marca) {
+  if (!completa && marca && !completarFichas) {
     try {
       lista = await cli.todas<any>(ruta, { filter: `lastUpdate gt ${marca}` });
     } catch (e) {
@@ -269,9 +275,10 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
     lista = await cli.todas<any>(ruta);
   }
 
-  const previos = new Map<string, { lu: number | null; contacto: boolean }>();
-  const p = await pool.request().input("e", sql.Int, cc).query("SELECT EmpleadoA3, LastUpdateA3, ContactoLeidoUtc FROM fich.A3Empleados WHERE EmpresaA3 = @e");
-  for (const x of p.recordset) previos.set(String(x.EmpleadoA3).trim(), { lu: x.LastUpdateA3 ? new Date(x.LastUpdateA3).getTime() : null, contacto: !!x.ContactoLeidoUtc });
+  const previos = new Map<string, { lu: number | null; contacto: boolean; ficha: boolean }>();
+  const p = await pool.request().input("e", sql.Int, cc).query("SELECT EmpleadoA3, LastUpdateA3, ContactoLeidoUtc, FichaLeidaUtc FROM fich.A3Empleados WHERE EmpresaA3 = @e");
+  for (const x of p.recordset)
+    previos.set(String(x.EmpleadoA3).trim(), { lu: x.LastUpdateA3 ? new Date(x.LastUpdateA3).getTime() : null, contacto: !!x.ContactoLeidoUtc, ficha: !!x.FichaLeidaUtc });
 
   const filas = lista
     .filter((x) => x?.employeeCode && x?.identifierNumber)
@@ -288,26 +295,62 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
         alta: fechaA3(x.enrolmentDate),
         baja: fechaA3(x.dropDate),
         lu,
+        tipoPersona: x.personTypeDescription ? String(x.personTypeDescription).trim().slice(0, 100) || null : null,
+        grupoTarifa: Number.isInteger(x.tariffGroupID) ? (x.tariffGroupID as number) : null,
+        practicas: typeof x.indNonRemuneratedPractices === "boolean" ? x.indNonRemuneratedPractices : null,
         prof: undefined as string | null | undefined,
         pers: undefined as string | null | undefined,
+        puesto: undefined as FichaPuesto | undefined,
+        contrato: undefined as FichaContrato | undefined,
       };
     });
 
-  // Email: solo de los que están en alta y son nuevos, han cambiado o en la completa
-  const pedirContacto = filas.filter((f) => {
-    if (!enAlta({ fechaBaja: f.baja }, hoy)) return false;
-    const prev = previos.get(f.cod);
-    return completa || !prev || !prev.contacto || prev.lu !== (f.lu ? f.lu.getTime() : null);
+  // Email (2 llamadas) y ficha laboral: puesto + responsable y contrato (2 llamadas). Solo de los que están en alta
+  // y son nuevos, han cambiado, no se habían leído aún o en la completa.
+  const detalle = filas
+    .filter((f) => enAlta({ fechaBaja: f.baja }, hoy))
+    .map((f) => {
+      const prev = previos.get(f.cod);
+      const cambio = completa || !prev || prev.lu !== (f.lu ? f.lu.getTime() : null);
+      return { f, contacto: cambio || !prev?.contacto, ficha: cambio || !prev?.ficha };
+    })
+    .filter((x) => x.contacto || x.ficha);
+  const nContacto = detalle.filter((x) => x.contacto).length;
+  const nFicha = detalle.filter((x) => x.ficha).length;
+  log(`Empresa ${cc}: ${filas.length} trabajadores leídos; ${nContacto} emails y ${nFicha} fichas (puesto y contrato) a consultar`);
+  let sinPermiso = false;
+  // Puesto y contrato: si el usuario de a3 no tiene permiso (403) se deja vacío y se avisa una vez en el log
+  const opcional = async (r: string) => {
+    try {
+      return await cli.get<any>(r);
+    } catch (e) {
+      if (e instanceof ErrorA3 && e.status === 403) {
+        sinPermiso = true;
+        return null;
+      }
+      throw e;
+    }
+  };
+  await enParalelo(detalle, PARALELO, async ({ f, contacto, ficha }) => {
+    const emp = `/api/companies/${cc}/employees/${encodeURIComponent(f.cod)}`;
+    const [pr, pe, pu, co] = await Promise.all([
+      contacto ? cli.get<any>(`${emp}/contactdata/professional`) : undefined,
+      contacto ? cli.get<any>(`${emp}/contactdata/personal`) : undefined,
+      ficha ? opcional(`${emp}/jobPositionInformation`) : undefined,
+      ficha ? opcional(`${emp}/contract-agreement`) : undefined,
+    ]);
+    if (contacto) {
+      const a = Array.isArray(pr) ? pr[0] : pr;
+      const b = Array.isArray(pe) ? pe[0] : pe;
+      f.prof = a?.professionalemail ? String(a.professionalemail).trim().slice(0, 254) : null;
+      f.pers = b?.personalemail ? String(b.personalemail).trim().slice(0, 254) : null;
+    }
+    if (ficha) {
+      f.puesto = fichaPuesto(pu);
+      f.contrato = fichaContrato(co);
+    }
   });
-  log(`Empresa ${cc}: ${filas.length} trabajadores leídos; ${pedirContacto.length} emails a consultar`);
-  await enParalelo(pedirContacto, PARALELO, async (f) => {
-    const base = `/api/companies/${cc}/employees/${encodeURIComponent(f.cod)}/contactdata`;
-    const [pr, pe] = await Promise.all([cli.get<any>(`${base}/professional`), cli.get<any>(`${base}/personal`)]);
-    const a = Array.isArray(pr) ? pr[0] : pr;
-    const b = Array.isArray(pe) ? pe[0] : pe;
-    f.prof = a?.professionalemail ? String(a.professionalemail).trim().slice(0, 254) : null;
-    f.pers = b?.personalemail ? String(b.personalemail).trim().slice(0, 254) : null;
-  });
+  if (sinPermiso) log(`Empresa ${cc}: el usuario de a3 no tiene permiso para leer puesto o contrato (403); se dejan vacíos`);
 
   if (!filas.length) return 0;
   const tx = new sql.Transaction(pool);
@@ -327,8 +370,31 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
     t.columns.add("Contacto", sql.Bit, { nullable: false });
     t.columns.add("EmailProfesional", sql.NVarChar(254), { nullable: true });
     t.columns.add("EmailPersonal", sql.NVarChar(254), { nullable: true });
-    for (const f of filas)
-      t.rows.add(f.cod, f.idA3, f.dni, f.apellidos, f.nombre, f.centro, f.alta, f.baja, f.lu, f.prof !== undefined, f.prof ?? null, f.pers ?? null);
+    t.columns.add("TipoPersona", sql.NVarChar(100), { nullable: true });
+    t.columns.add("GrupoTarifa", sql.Int, { nullable: true });
+    t.columns.add("Practicas", sql.Bit, { nullable: true });
+    t.columns.add("Ficha", sql.Bit, { nullable: false });
+    t.columns.add("PuestoCodigo", sql.NVarChar(20), { nullable: true });
+    t.columns.add("Puesto", sql.NVarChar(150), { nullable: true });
+    t.columns.add("DepartamentoA3", sql.NVarChar(150), { nullable: true });
+    t.columns.add("UnidadOrganizativa", sql.NVarChar(150), { nullable: true });
+    t.columns.add("ResponsableCodigo", sql.NVarChar(20), { nullable: true });
+    t.columns.add("ResponsableNombre", sql.NVarChar(200), { nullable: true });
+    t.columns.add("Jornada", sql.Decimal(7, 2), { nullable: true });
+    t.columns.add("PuestoDesde", sql.Date, { nullable: true });
+    t.columns.add("ContratoCodigo", sql.NVarChar(10), { nullable: true });
+    t.columns.add("Contrato", sql.NVarChar(200), { nullable: true });
+    t.columns.add("ContratoDesde", sql.Date, { nullable: true });
+    t.columns.add("ContratoHasta", sql.Date, { nullable: true });
+    t.columns.add("TipoCotizacion", sql.NVarChar(100), { nullable: true });
+    for (const f of filas) {
+      const pu = f.puesto, co = f.contrato;
+      t.rows.add(f.cod, f.idA3, f.dni, f.apellidos, f.nombre, f.centro, f.alta, f.baja, f.lu, f.prof !== undefined, f.prof ?? null, f.pers ?? null,
+        f.tipoPersona, f.grupoTarifa, f.practicas, pu !== undefined,
+        pu?.puestoCodigo ?? null, pu?.puesto ?? null, pu?.departamento ?? null, pu?.unidadOrganizativa ?? null,
+        pu?.responsableCodigo ?? null, pu?.responsableNombre ?? null, pu?.jornada ?? null, pu?.puestoDesde ?? null,
+        co?.contratoCodigo ?? null, co?.contrato ?? null, co?.contratoDesde ?? null, co?.contratoHasta ?? null, co?.tipoCotizacion ?? null);
+    }
     await new sql.Request(tx).bulk(t);
     await new sql.Request(tx).input("e", sql.Int, cc).query(
       `MERGE fich.A3Empleados AS d USING #emp AS s ON d.EmpresaA3 = @e AND d.EmpleadoA3 = s.EmpleadoA3
@@ -336,11 +402,30 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
             FechaAlta = s.FechaAlta, FechaBaja = s.FechaBaja, LastUpdateA3 = s.LastUpdateA3, ActualizadoUtc = SYSUTCDATETIME(),
             EmailProfesional = CASE WHEN s.Contacto = 1 THEN s.EmailProfesional ELSE d.EmailProfesional END,
             EmailPersonal    = CASE WHEN s.Contacto = 1 THEN s.EmailPersonal    ELSE d.EmailPersonal END,
-            ContactoLeidoUtc = CASE WHEN s.Contacto = 1 THEN SYSUTCDATETIME() ELSE d.ContactoLeidoUtc END
+            ContactoLeidoUtc = CASE WHEN s.Contacto = 1 THEN SYSUTCDATETIME() ELSE d.ContactoLeidoUtc END,
+            TipoPersona = s.TipoPersona, GrupoTarifa = s.GrupoTarifa, Practicas = s.Practicas,
+            PuestoCodigo       = CASE WHEN s.Ficha = 1 THEN s.PuestoCodigo       ELSE d.PuestoCodigo END,
+            Puesto             = CASE WHEN s.Ficha = 1 THEN s.Puesto             ELSE d.Puesto END,
+            DepartamentoA3     = CASE WHEN s.Ficha = 1 THEN s.DepartamentoA3     ELSE d.DepartamentoA3 END,
+            UnidadOrganizativa = CASE WHEN s.Ficha = 1 THEN s.UnidadOrganizativa ELSE d.UnidadOrganizativa END,
+            ResponsableCodigo  = CASE WHEN s.Ficha = 1 THEN s.ResponsableCodigo  ELSE d.ResponsableCodigo END,
+            ResponsableNombre  = CASE WHEN s.Ficha = 1 THEN s.ResponsableNombre  ELSE d.ResponsableNombre END,
+            Jornada            = CASE WHEN s.Ficha = 1 THEN s.Jornada            ELSE d.Jornada END,
+            PuestoDesde        = CASE WHEN s.Ficha = 1 THEN s.PuestoDesde        ELSE d.PuestoDesde END,
+            ContratoCodigo     = CASE WHEN s.Ficha = 1 THEN s.ContratoCodigo     ELSE d.ContratoCodigo END,
+            Contrato           = CASE WHEN s.Ficha = 1 THEN s.Contrato           ELSE d.Contrato END,
+            ContratoDesde      = CASE WHEN s.Ficha = 1 THEN s.ContratoDesde      ELSE d.ContratoDesde END,
+            ContratoHasta      = CASE WHEN s.Ficha = 1 THEN s.ContratoHasta      ELSE d.ContratoHasta END,
+            TipoCotizacion     = CASE WHEN s.Ficha = 1 THEN s.TipoCotizacion     ELSE d.TipoCotizacion END,
+            FichaLeidaUtc      = CASE WHEN s.Ficha = 1 THEN SYSUTCDATETIME()     ELSE d.FichaLeidaUtc END
        WHEN NOT MATCHED BY TARGET THEN INSERT (EmpresaA3, EmpleadoA3, IdA3, DNI, Apellidos, Nombre, CentroA3, FechaAlta, FechaBaja, LastUpdateA3,
-            EmailProfesional, EmailPersonal, ContactoLeidoUtc)
+            EmailProfesional, EmailPersonal, ContactoLeidoUtc, TipoPersona, GrupoTarifa, Practicas,
+            PuestoCodigo, Puesto, DepartamentoA3, UnidadOrganizativa, ResponsableCodigo, ResponsableNombre, Jornada, PuestoDesde,
+            ContratoCodigo, Contrato, ContratoDesde, ContratoHasta, TipoCotizacion, FichaLeidaUtc)
          VALUES (@e, s.EmpleadoA3, s.IdA3, s.DNI, s.Apellidos, s.Nombre, s.CentroA3, s.FechaAlta, s.FechaBaja, s.LastUpdateA3,
-            s.EmailProfesional, s.EmailPersonal, CASE WHEN s.Contacto = 1 THEN SYSUTCDATETIME() END);
+            s.EmailProfesional, s.EmailPersonal, CASE WHEN s.Contacto = 1 THEN SYSUTCDATETIME() END, s.TipoPersona, s.GrupoTarifa, s.Practicas,
+            s.PuestoCodigo, s.Puesto, s.DepartamentoA3, s.UnidadOrganizativa, s.ResponsableCodigo, s.ResponsableNombre, s.Jornada, s.PuestoDesde,
+            s.ContratoCodigo, s.Contrato, s.ContratoDesde, s.ContratoHasta, s.TipoCotizacion, CASE WHEN s.Ficha = 1 THEN SYSUTCDATETIME() END);
        DROP TABLE #emp;`
     );
     await tx.commit();
