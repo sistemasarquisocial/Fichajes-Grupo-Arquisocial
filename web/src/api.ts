@@ -68,6 +68,7 @@ export interface Centro {
   direccion: string | null; codigoPostal: string | null; ciudad: string | null; telefono: string | null;
   activo: boolean; creadoUtc: string; usuariosActivos: number;
   coordinadorId: number | null; coordinador: string | null; gestorId: number | null; gestor: string | null;
+  tecnicoRrhhId: number | null; tecnicoRrhh: string | null;
   comunidad: string | null; margenMinutos: number; escaladoMinutos: number; umbralSobrecargaHoras: number; maxHorasSinSalida: number;
 }
 export interface DatosCentro {
@@ -383,7 +384,7 @@ export const api = {
   crearCentro: (d: DatosCentro) => llamar<{ id: number }>("POST", "gestion/centros", d),
   editarCentro: (id: number, d: DatosCentro) => llamar("PUT", `gestion/centros/${id}`, d),
   estadoCentro: (id: number, activo: boolean) => llamar("PUT", `gestion/centros/${id}/estado`, { activo }),
-  responsablesCentro: (id: number, d: { coordinadorId: number | null; gestorId: number | null }) => llamar("PUT", `gestion/centros/${id}/responsables`, d),
+  responsablesCentro: (id: number, d: { coordinadorId: number | null; gestorId: number | null; tecnicoRrhhId: number | null }) => llamar("PUT", `gestion/centros/${id}/responsables`, d),
 };
 
 /* ---------- utilidades de formato ---------- */

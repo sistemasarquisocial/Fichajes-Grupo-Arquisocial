@@ -472,3 +472,23 @@ textarea:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-co
 .a3 .tabla select { max-width: 340px; width: 100%; }
 .a3-vacio { padding: 16px; }
 .a3-org { display: inline-block; }
+
+/* ===== Panel de administración ancho (tablas sin cortes) ===== */
+.contenido:has(.admin) { max-width: 1480px; }
+body:has(.admin) .cabecera-int { max-width: 1480px; }
+.admin-layout { grid-template-columns: 290px minmax(0, 1fr); gap: 24px; }
+.admin-menu a { padding: 14px; }
+.admin-menu a strong { font-size: 1rem; }
+.admin-menu a small { font-size: 0.82rem; }
+@media (max-width: 860px) { .admin-layout { grid-template-columns: 1fr; } }
+
+/* ===== Gestión de centros: filtros, grupos y columnas compactas ===== */
+.centros-filtros { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; padding: 8px 14px 12px; border-bottom: 1px solid var(--borde); }
+.centros-filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--texto-suave); font-weight: 600; }
+.centros-filtros select { min-width: 170px; padding: 7px 10px; }
+.centros-total { margin-left: auto; align-self: center; }
+.tabla tr.grupo td { background: var(--verde-claro); color: var(--verde-oscuro); font-weight: 700; padding-top: 8px; padding-bottom: 8px; }
+.tabla td.codigos { white-space: nowrap; }
+.tabla td.responsables { min-width: 190px; }
+.admin .tabla th, .admin .tabla td { padding: 10px 12px; }
+.admin .tabla .acciones-fila .btn-link { margin: 0 0 3px; padding: 1px 0; line-height: 1.35; font-size: 0.86rem; }
