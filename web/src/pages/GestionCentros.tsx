@@ -60,7 +60,7 @@ export default function GestionCentros() {
     const q = filtro.trim().toLowerCase();
     if (!centros) return [];
     if (!q) return centros;
-    return centros.filter((c) => `${c.codigoServicio ?? ""} ${c.nombre} ${c.empresa} ${c.ciudad ?? ""} ${c.direccion ?? ""} ${c.coordinador ?? ""} ${c.gestor ?? ""}`.toLowerCase().includes(q));
+    return centros.filter((c) => `${c.codigoServicio ?? ""} ${c.codigoA3 ?? ""} ${c.nombre} ${c.empresa} ${c.ciudad ?? ""} ${c.direccion ?? ""} ${c.coordinador ?? ""} ${c.gestor ?? ""}`.toLowerCase().includes(q));
   }, [centros, filtro]);
 
   async function cambiarEstado(c: Centro) {
@@ -99,13 +99,14 @@ export default function GestionCentros() {
             ) : (
               <table className="tabla">
                 <thead>
-                  <tr><th>Código</th><th>Centro</th><th>Empresa</th><th>Coordinador / Gestor</th><th>Dirección</th><th>Estado</th><th /></tr>
+                  <tr><th>Código</th><th>Código a3</th><th>Centro</th><th>Empresa</th><th>Coordinador / Gestor</th><th>Dirección</th><th>Estado</th><th /></tr>
                 </thead>
                 <tbody>
                   {filtrados.map((c) => (
                     <tr key={c.id} className={c.activo ? "" : "inactivo"}>
                       <td>{c.codigoServicio ? <span className="codigo">{c.codigoServicio}</span> : <span className="chip chip-pausa_inicio">Sin código</span>}</td>
-                      <td><strong>{c.nombre}</strong><div className="nota">{c.usuariosActivos} usuario(s) activo(s)</div></td>
+                      <td>{c.codigoA3 ? <span className="codigo">{c.codigoA3}</span> : <span className="nota">—</span>}</td>
+                      <td><strong>{c.nombre}</strong>{c.esEstructura && <> <span className="chip chip-activa">Estructura</span></>}<div className="nota">{c.usuariosActivos} usuario(s) activo(s)</div></td>
                       <td>{c.empresa}</td>
                       <td>
                         <div>{c.coordinador ? <strong>{c.coordinador}</strong> : <span className="chip chip-pausa_inicio">Sin coordinador</span>}</div>
