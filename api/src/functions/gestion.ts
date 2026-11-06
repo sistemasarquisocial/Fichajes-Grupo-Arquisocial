@@ -15,7 +15,7 @@ const SELECT_USUARIO = `
          u.TipoPerfil AS tipoPerfil, u.DepartamentoId AS departamentoId, d.Nombre AS departamento, u.ManagerId AS managerId,
          u.Rol AS rol, u.Activo AS activo, u.DebeCambiarPassword AS debeCambiarPassword,
          CASE WHEN u.BloqueadoHastaUtc > SYSUTCDATETIME() THEN 1 ELSE 0 END AS bloqueado,
-         u.UltimoAccesoUtc AS ultimoAccesoUtc, u.CreadoUtc AS creadoUtc`;
+         u.UltimoAccesoUtc AS ultimoAccesoUtc, u.CreadoUtc AS creadoUtc, u.EmailCorporativo AS emailCorporativo, u.DNI AS dni`;
 const FROM_USUARIO = `
     FROM fich.Usuarios u
     JOIN fich.Empresas e ON e.EmpresaId = u.EmpresaId
@@ -35,6 +35,13 @@ ${FROM_USUARIO}
 
 /** Código de trabajador a3 sin ceros a la izquierda ni espacios ("000045" → "45"), para enlazar responsables. */
 const codigoA3 = (v: unknown) => String(v ?? "").trim().replace(/^0+(?=.)/, "");
+
+/** Correo profesional (corporativo): opcional; vacío → null. */
+function leerEmailCorporativo(v: unknown): { valor: string | null } | { error: string } {
+  const e = String(v ?? "").trim();
+  if (!e) return { valor: null };
+  return validarEmail(e) ? { valor: e.toLowerCase() } : { error: "Correo profesional no válido" };
+}
 
 /** Solo un ADMIN puede crear/editar otros ADMIN. */
 function puedeAsignarRol(actor: Rol, rol: Rol) {
@@ -131,6 +138,8 @@ app.http("gestionUsuariosCrear", {
       if (!puedeAsignarRol(actor.rol, rol)) return error(403, "Solo un administrador puede crear administradores");
       const errPw = validarPassword(b.passwordTemporal);
       if (errPw) return error(400, errPw);
+      const corp = leerEmailCorporativo(b.emailCorporativo);
+      if ("error" in corp) return error(400, corp.error);
 
       const pool = await getPool();
       const perfil = await validarPerfil(pool, b, empresaId, null);
@@ -151,10 +160,11 @@ app.http("gestionUsuariosCrear", {
         .input("dep", sql.Int, perfil.departamentoId)
         .input("man", sql.Int, perfil.managerId)
         .input("hash", sql.VarChar(255), hash)
+        .input("corp", sql.NVarChar(254), corp.valor)
         .query(
-          `INSERT INTO fich.Usuarios (Email, Nombre, Apellidos, EmpresaId, CentroId, Rol, TipoPerfil, DepartamentoId, ManagerId, PasswordHash, DebeCambiarPassword)
+          `INSERT INTO fich.Usuarios (Email, Nombre, Apellidos, EmpresaId, CentroId, Rol, TipoPerfil, DepartamentoId, ManagerId, PasswordHash, DebeCambiarPassword, EmailCorporativo)
            OUTPUT INSERTED.UsuarioId
-           VALUES (@email, @nombre, @apellidos, @empresa, @centro, @rol, @tipo, @dep, @man, @hash, 1)`
+           VALUES (@email, @nombre, @apellidos, @empresa, @centro, @rol, @tipo, @dep, @man, @hash, 1, @corp)`
         );
       const id = r.recordset[0].UsuarioId;
       await auditar(
@@ -183,7 +193,7 @@ app.http("gestionUsuariosEditar", {
       if (!b) return error(400, "Datos no válidos");
 
       const pool = await getPool();
-      const act = await pool.request().input("id", sql.Int, id).query("SELECT Rol, Activo, Email, EmpresaId, CentroId, TipoPerfil, DepartamentoId, ManagerId FROM fich.Usuarios WHERE UsuarioId = @id");
+      const act = await pool.request().input("id", sql.Int, id).query("SELECT Rol, Activo, Email, EmailCorporativo, EmpresaId, CentroId, TipoPerfil, DepartamentoId, ManagerId FROM fich.Usuarios WHERE UsuarioId = @id");
       const actual = act.recordset[0];
       if (!actual) return error(404, "Usuario no encontrado");
       if (actual.Rol === "ADMIN" && actor.rol !== "ADMIN") return error(403, "Solo un administrador puede modificar administradores");
@@ -199,6 +209,8 @@ app.http("gestionUsuariosEditar", {
       if (id === actor.usuarioId && (!activo || rol !== actor.rol)) return error(400, "No puedes desactivarte ni cambiar tu propio rol");
       const perfil = await validarPerfil(pool, b, empresaId, id);
       if ("error" in perfil) return error(400, perfil.error);
+      const corp = leerEmailCorporativo(b.emailCorporativo);
+      if ("error" in corp) return error(400, corp.error);
 
       const dup = await pool
         .request()
@@ -223,9 +235,10 @@ app.http("gestionUsuariosEditar", {
         .input("man", sql.Int, perfil.managerId)
         .input("activo", sql.Bit, activo)
         .input("inv", sql.Int, invalidar)
+        .input("corp", sql.NVarChar(254), corp.valor)
         .query(
           `UPDATE fich.Usuarios
-              SET Email = @email, Nombre = @nombre, Apellidos = @apellidos, EmpresaId = @empresa, CentroId = @centro,
+              SET Email = @email, EmailCorporativo = @corp, Nombre = @nombre, Apellidos = @apellidos, EmpresaId = @empresa, CentroId = @centro,
                   Rol = @rol, TipoPerfil = @tipo, DepartamentoId = @dep, ManagerId = @man, Activo = @activo, VersionSesion = VersionSesion + @inv, ModificadoUtc = SYSUTCDATETIME()
             WHERE UsuarioId = @id`
         );
@@ -234,7 +247,7 @@ app.http("gestionUsuariosEditar", {
         "EDITAR_USUARIO",
         "Usuario",
         id,
-        `antes: ${actual.Email} rol=${actual.Rol} activo=${actual.Activo} empresa=${actual.EmpresaId} perfil=${actual.TipoPerfil ?? "-"} centro=${actual.CentroId ?? "-"} departamento=${actual.DepartamentoId ?? "-"} manager=${actual.ManagerId ?? "-"} | despues: ${b.email} rol=${rol} activo=${activo} empresa=${empresaId} perfil=${perfil.tipoPerfil ?? "-"} centro=${perfil.centroId ?? "-"} departamento=${perfil.departamentoId ?? "-"} manager=${perfil.managerId ?? "-"}`,
+        `antes: ${actual.Email} corp=${actual.EmailCorporativo ?? "-"} rol=${actual.Rol} activo=${actual.Activo} empresa=${actual.EmpresaId} perfil=${actual.TipoPerfil ?? "-"} centro=${actual.CentroId ?? "-"} departamento=${actual.DepartamentoId ?? "-"} manager=${actual.ManagerId ?? "-"} | despues: ${b.email} corp=${corp.valor ?? "-"} rol=${rol} activo=${activo} empresa=${empresaId} perfil=${perfil.tipoPerfil ?? "-"} centro=${perfil.centroId ?? "-"} departamento=${perfil.departamentoId ?? "-"} manager=${perfil.managerId ?? "-"}`,
         ipCliente(req)
       );
       return json(200, { ok: true });

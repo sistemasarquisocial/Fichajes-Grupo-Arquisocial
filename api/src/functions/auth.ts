@@ -11,6 +11,9 @@ import {
   ipCliente,
   leerConfig,
   primerAcceso,
+  esEmail,
+  normDni,
+  ocultarIdentificador,
 } from "../lib/auth";
 import { json, error, leerJson, conSesion, publico } from "../lib/http";
 import { auditar } from "../lib/auditoria";
@@ -106,16 +109,19 @@ app.http("login", {
   route: "auth/login",
   handler: publico(async (req) => {
     const b = await leerJson(req);
-    if (!b || !validarEmail(b.email) || typeof b.password !== "string" || !b.password) {
-      return error(400, "Introduce email y contraseña");
+    // «usuario»: DNI/NIE o email (se acepta también «email» por compatibilidad)
+    const usuario = typeof b?.usuario === "string" ? b.usuario.trim() : typeof b?.email === "string" ? b.email.trim() : "";
+    const validoId = esEmail(usuario) ? validarEmail(usuario) : /^[A-Z0-9]{5,12}$/.test(normDni(usuario));
+    if (!b || !validoId || typeof b.password !== "string" || !b.password) {
+      return error(400, "Introduce tu DNI/NIE (o email) y la contraseña");
     }
     const recordar = b.recordar === true;
-    const r = await login(b.email, b.password, recordar);
+    const r = await login(usuario, b.password, recordar);
     if (!r.ok) {
-      await auditar(null, "LOGIN_FALLIDO", "Usuario", null, `${String(b.email).slice(0, 254)} (${r.motivo})`, ipCliente(req));
+      await auditar(null, "LOGIN_FALLIDO", "Usuario", null, `${ocultarIdentificador(usuario)} (${r.motivo})`, ipCliente(req));
       return r.motivo === "bloqueado"
         ? error(423, "Cuenta bloqueada temporalmente por intentos fallidos. Inténtalo en unos minutos.")
-        : error(401, "Email o contraseña incorrectos");
+        : error(401, "Usuario o contraseña incorrectos");
     }
     await auditar(r.usuario.usuarioId, "LOGIN", "Usuario", r.usuario.usuarioId, null, ipCliente(req));
     return json(200, { usuario: r.usuario }, { cookies: [cookieSesion(r.token, recordar)] });
