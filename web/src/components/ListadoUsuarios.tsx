@@ -71,7 +71,7 @@ export default function ListadoUsuarios({ usuarios, onEditar, onResetear }: Prop
       if (fRol && u.rol !== fRol) return false;
       if (fContrato && (u.contrato ?? "SIN") !== fContrato) return false;
       if (!palabras.length) return true;
-      const t = sinAcentos(`${u.nombre} ${u.apellidos} ${u.email} ${u.empresa} ${u.centro ?? ""} ${u.codigoServicio ?? ""} ${u.centroA3 ?? ""} ${u.departamento ?? ""} ${u.puesto ?? ""} ${u.contrato ?? ""} ${u.responsableA3 ?? ""} ${u.aprobador ?? ""} ${u.empleadoA3 ?? ""}`);
+      const t = sinAcentos(`${u.nombre} ${u.apellidos} ${u.email} ${u.empresa} ${u.centro ?? ""} ${u.codigoServicio ?? ""} ${u.centroA3 ?? ""} ${u.departamento ?? ""} ${u.puesto ?? ""} ${u.contrato ?? ""} ${u.responsableA3 ?? ""} ${u.aprobador ?? ""} ${u.empleadoA3 ?? ""} ${u.dni ?? ""} ${u.emailCorporativo ?? ""}`);
       return palabras.every((w) => t.includes(w));
     });
   }, [usuarios, q, fEmpresa, fCentro, fPerfil, fRol, fContrato]);
@@ -161,7 +161,7 @@ export default function ListadoUsuarios({ usuarios, onEditar, onResetear }: Prop
     <tr key={u.id} className={u.estado === "BAJA" ? "inactivo" : ""}>
       <td>
         <strong>{u.apellidos}, {u.nombre}</strong>
-        <div className="nota">{u.email}{u.empleadoA3 ? ` · a3 ${u.empresaA3}/${u.empleadoA3}` : ""}</div>
+        <div className="nota">{u.emailCorporativo ?? u.email}{u.dni ? ` · ${u.dni}` : ""}{u.empleadoA3 ? ` · a3 ${u.empresaA3}/${u.empleadoA3}` : ""}</div>
       </td>
       <td>
         {u.puesto ?? <span className="nota">—</span>}
@@ -222,7 +222,7 @@ export default function ListadoUsuarios({ usuarios, onEditar, onResetear }: Prop
   return (
     <div className="tarjeta tabla-contenedor">
       <div className="tabla-buscador">
-        <input className="buscador" placeholder="Buscar por nombre, email, puesto, contrato, centro, responsable o código a3…" value={q} onChange={(e) => { setQ(e.target.value); setPaginas(1); }} />
+        <input className="buscador" placeholder="Buscar por nombre, DNI, email, puesto, contrato, centro, responsable o código a3…" value={q} onChange={(e) => { setQ(e.target.value); setPaginas(1); }} />
       </div>
       <div className="usuarios-barra">
       <div className="usuarios-estados" role="tablist" aria-label="Estado">
