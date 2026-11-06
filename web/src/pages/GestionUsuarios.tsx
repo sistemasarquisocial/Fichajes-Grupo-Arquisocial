@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, Centro, Departamento, Empresa, Rol, ROLES, ETIQUETA_ROL, ETIQUETA_PERFIL, TipoPerfil, UsuarioGestion, generarPasswordTemporal } from "../api";
 import SelectorPersona from "../components/SelectorPersona";
+import ListadoUsuarios from "../components/ListadoUsuarios";
 
 const VACIO = {
   email: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
@@ -18,7 +19,6 @@ export default function GestionUsuarios() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
-  const [filtro, setFiltro] = useState("");
   const [editando, setEditando] = useState<UsuarioGestion | "nuevo" | null>(null);
   const [form, setForm] = useState(VACIO);
   const [pwTemporal, setPwTemporal] = useState("");
@@ -30,13 +30,6 @@ export default function GestionUsuarios() {
     setUsuarios(u); setEmpresas(e); setCentros(c); setDepartamentos(d);
   }
   useEffect(() => { cargar().catch((err) => setMensaje({ tipo: "error", texto: err.message })); }, []);
-
-  const filtrados = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
-    if (!usuarios) return [];
-    if (!q) return usuarios;
-    return usuarios.filter((u) => `${u.nombre} ${u.apellidos} ${u.email} ${u.empresa} ${u.centro ?? ""} ${u.departamento ?? ""} ${u.aprobador ?? ""}`.toLowerCase().includes(q));
-  }, [usuarios, filtro]);
 
   const centrosEmpresa = centros.filter((c) => String(c.empresaId) === String(form.empresaId) && c.activo);
   const candidatosManager = (usuarios ?? []).filter((u) => u.activo && (editando === "nuevo" || !editando || u.id !== editando.id));
@@ -107,7 +100,6 @@ export default function GestionUsuarios() {
           <h2>Gestión de usuarios</h2>
           <button className="btn btn-primario" onClick={abrirNuevo}>+ Nuevo usuario</button>
         </div>
-        <input className="buscador" placeholder="Buscar por nombre, email, empresa o centro…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
         {mensaje && <p className={mensaje.tipo} role="status">{mensaje.texto}</p>}
         {credenciales && (
           <div className="credenciales">
@@ -208,39 +200,11 @@ export default function GestionUsuarios() {
         </form>
       )}
 
-      <div className="tarjeta tabla-contenedor">
-        {usuarios === null ? (
-          <div className="centrado-bloque"><div className="spinner" /></div>
-        ) : (
-          <table className="tabla">
-            <thead>
-              <tr><th>Nombre</th><th>Email</th><th>Perfil</th><th>Aprobador</th><th>Rol</th><th>Estado</th><th></th></tr>
-            </thead>
-            <tbody>
-              {filtrados.map((u) => (
-                <tr key={u.id} className={u.activo ? "" : "inactivo"}>
-                  <td>{u.apellidos}, {u.nombre}</td>
-                  <td>{u.email}</td>
-                  <td>
-                    {u.tipoPerfil ? ETIQUETA_PERFIL[u.tipoPerfil] : <span className="chip chip-pausa_inicio">Sin perfil</span>}
-                    <div className="nota">{u.empresa}{u.tipoPerfil === "ESTRUCTURA" ? (u.departamento ? ` · ${u.departamento}` : " · sin departamento") : u.centro ? ` · ${u.codigoServicio ? `${u.codigoServicio} · ` : ""}${u.centro}` : ""}</div>
-                  </td>
-                  <td>{u.aprobador ?? <span className="nota">—</span>}{u.suplente && <div className="nota">Hoy: {u.suplente} (suplente)</div>}</td>
-                  <td>{ETIQUETA_ROL[u.rol] ?? u.rol}</td>
-                  <td>
-                    {!u.activo ? <span className="chip">Inactivo</span> : u.bloqueado ? <span className="chip chip-salida">Bloqueado</span> : u.debeCambiarPassword ? <span className="chip chip-pausa_inicio">Pendiente de activar</span> : <span className="chip chip-entrada">Activo</span>}
-                  </td>
-                  <td className="acciones-fila">
-                    <button className="btn-link" onClick={() => abrirEditar(u)}>Editar</button>
-                    <button className="btn-link" onClick={() => resetear(u)}>Resetear contraseña</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
+      {usuarios === null ? (
+        <div className="tarjeta"><div className="centrado-bloque"><div className="spinner" aria-label="Cargando" /></div></div>
+      ) : (
+        <ListadoUsuarios usuarios={usuarios} onEditar={abrirEditar} onResetear={resetear} />
+      )}
     </section>
   );
 }
