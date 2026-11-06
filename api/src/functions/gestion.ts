@@ -15,11 +15,26 @@ const SELECT_USUARIO = `
          u.TipoPerfil AS tipoPerfil, u.DepartamentoId AS departamentoId, d.Nombre AS departamento, u.ManagerId AS managerId,
          u.Rol AS rol, u.Activo AS activo, u.DebeCambiarPassword AS debeCambiarPassword,
          CASE WHEN u.BloqueadoHastaUtc > SYSUTCDATETIME() THEN 1 ELSE 0 END AS bloqueado,
-         u.UltimoAccesoUtc AS ultimoAccesoUtc, u.CreadoUtc AS creadoUtc
+         u.UltimoAccesoUtc AS ultimoAccesoUtc, u.CreadoUtc AS creadoUtc`;
+const FROM_USUARIO = `
     FROM fich.Usuarios u
     JOIN fich.Empresas e ON e.EmpresaId = u.EmpresaId
     LEFT JOIN fich.Centros c ON c.CentroId = u.CentroId
     LEFT JOIN fich.Departamentos d ON d.DepartamentoId = u.DepartamentoId`;
+
+/** Listado: además, datos de a3 (alta/baja, puesto, contrato, responsable) y estado automático por fecha de baja. */
+const SELECT_LISTADO = `${SELECT_USUARIO},
+         c.CodigoA3 AS centroA3, u.EmpresaA3 AS empresaA3, u.EmpleadoA3 AS empleadoA3, u.OrigenA3 AS origenA3,
+         CONVERT(VARCHAR(10), u.FechaAltaA3, 23) AS fechaAltaA3, CONVERT(VARCHAR(10), u.FechaBajaA3, 23) AS fechaBajaA3,
+         CASE WHEN u.Activo = 0 OR u.FechaBajaA3 < CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'Romance Standard Time' AS DATE) THEN 'BAJA'
+              WHEN u.FechaBajaA3 IS NOT NULL THEN 'BAJA_PROGRAMADA' ELSE 'ALTA' END AS estado,
+         ae.Puesto AS puesto, ae.DepartamentoA3 AS departamentoA3, ae.Contrato AS contrato, ae.ContratoCodigo AS contratoCodigo,
+         ae.Jornada AS jornada, ae.ResponsableNombre AS responsableA3, ae.ResponsableCodigo AS responsableCodigoA3
+${FROM_USUARIO}
+    LEFT JOIN fich.A3Empleados ae ON ae.EmpresaA3 = u.EmpresaA3 AND ae.EmpleadoA3 = u.EmpleadoA3`;
+
+/** Código de trabajador a3 sin ceros a la izquierda ni espacios ("000045" → "45"), para enlazar responsables. */
+const codigoA3 = (v: unknown) => String(v ?? "").trim().replace(/^0+(?=.)/, "");
 
 /** Solo un ADMIN puede crear/editar otros ADMIN. */
 function puedeAsignarRol(actor: Rol, rol: Rol) {
@@ -68,13 +83,22 @@ app.http("gestionUsuariosListar", {
   handler: conSesion(
     async () => {
       const pool = await getPool();
-      const [r, org] = await Promise.all([pool.request().query(`${SELECT_USUARIO} ORDER BY u.Activo DESC, u.Apellidos, u.Nombre`), cargarOrg()]);
+      const [r, org] = await Promise.all([pool.request().query(`${SELECT_LISTADO} ORDER BY u.Activo DESC, u.Apellidos, u.Nombre`), cargarOrg()]);
+      // Responsable de a3 → usuario de la app (mismo código de empresa a3)
+      const porCodigo = new Map<string, number>();
+      for (const x of r.recordset) if (x.empresaA3 && x.empleadoA3) porCodigo.set(`${x.empresaA3}-${codigoA3(x.empleadoA3)}`, x.id);
       return json(
         200,
         r.recordset.map((x: any) => {
           const a = aprobadorEfectivo(org, x.id);
+          const resp = x.responsableCodigoA3 ? porCodigo.get(`${x.empresaA3}-${codigoA3(x.responsableCodigoA3)}`) ?? null : null;
+          const { responsableCodigoA3, ...resto } = x;
           return {
-            ...x,
+            ...resto,
+            empleadoA3: x.empleadoA3 ? String(x.empleadoA3).trim() : null,
+            origenA3: !!x.origenA3,
+            jornada: x.jornada === null ? null : Number(x.jornada),
+            responsableA3Id: resp !== x.id ? resp : null,
             manager: nombreDe(org, x.managerId),
             aprobador: nombreDe(org, a.titular),
             suplente: a.efectivo !== a.titular ? nombreDe(org, a.efectivo) : null,
