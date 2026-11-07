@@ -1,3 +1,4 @@
+import { useRefrescoVisible } from "./refresco";
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api";
@@ -21,14 +22,10 @@ export default function App() {
   const supervisa = !!usuario?.tieneEquipo && !usuario?.debeCambiarPassword;
 
   useEffect(() => { setPendientes(usuario?.pendientesAprobacion ?? 0); }, [usuario]);
-  // Contador de aprobaciones: se refresca al cambiar de página y cada 2 minutos
-  useEffect(() => {
-    if (!supervisa) return;
-    const leer = () => api.contadorAprobaciones().then((r) => { setPendientes(r.pendientes); setAvisos(r.avisosEquipo ?? 0); }).catch(() => {});
-    leer();
-    const t = setInterval(leer, 120000);
-    return () => clearInterval(t);
-  }, [supervisa, ubicacion.pathname]);
+  // Contador de aprobaciones: se refresca al cambiar de página y cada 10 minutos con la pestaña visible
+  const leerContador = () => api.contadorAprobaciones().then((r) => { setPendientes(r.pendientes); setAvisos(r.avisosEquipo ?? 0); }).catch(() => {});
+  useEffect(() => { if (supervisa) leerContador(); }, [supervisa, ubicacion.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  useRefrescoVisible(leerContador, 600000, supervisa);
 
   if (cargando) return <div className="centrado"><div className="spinner" aria-label="Cargando" /></div>;
 
