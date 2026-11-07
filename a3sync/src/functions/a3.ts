@@ -6,9 +6,11 @@ import { sincronizar, auditar } from "../lib/sync";
 
 /* Funciones del conector a3:
    - a3/callback (HTTP): vuelta del login de Wolters Kluwer tras «Conectar con a3» en la app.
-   - solicitudes (cada 5 min): atiende las sincronizaciones pedidas desde la app.
-   - nocturna (01:30 UTC ≈ 02:30 en invierno / 03:30 en verano): solo cambios (altas, bajas y modificaciones desde
-     la última sincronización correcta). La completa solo se lanza a mano desde la app. */
+   - nocturna (01:30 UTC ≈ 02:30 en invierno / 03:30 en verano), UNA vez al día para no despertar la base de datos:
+     aplica las bajas por fecha y sincroniza. Si desde la app se ha pedido «Sincronizar ahora» o «Completa», se atiende
+     esa petición (la completa solo si se pide); si no, solo cambios desde la última sincronización correcta.
+     Para lanzarla al momento: portal de Azure → func-a3sync-prod → a3Nocturna → Probar/Ejecutar.
+   Ya no hay ninguna función que consulte la base de datos cada pocos minutos. */
 
 const MAX_STATE_MIN = 15;
 const MAX_EN_CURSO_H = 3;
@@ -89,7 +91,6 @@ async function aplicarBajasVencidas(pool: Awaited<ReturnType<typeof getPool>>, c
 /** Toma la siguiente sincronización pendiente (si no hay otra en curso) y la ejecuta. */
 async function atenderSolicitud(ctx: InvocationContext) {
   const pool = await getPool();
-  await aplicarBajasVencidas(pool, ctx).catch((e) => ctx.error(e));
   await pool
     .request()
     .input("h", sql.Int, MAX_EN_CURSO_H)
@@ -140,17 +141,12 @@ async function atenderSolicitud(ctx: InvocationContext) {
   }
 }
 
-app.timer("a3Solicitudes", {
-  schedule: "0 */5 * * * *",
-  handler: async (_t, ctx) => {
-    await atenderSolicitud(ctx);
-  },
-});
-
 app.timer("a3Nocturna", {
   schedule: "0 30 1 * * *",
   handler: async (_t, ctx) => {
     const pool = await getPool();
+    // Estado automático: bajas cuya fecha ya ha pasado (aunque no haya conexión con a3)
+    await aplicarBajasVencidas(pool, ctx).catch((e) => ctx.error(e));
     // Conexión caducada por fecha: se marca para que la app avise
     await pool.request().query("UPDATE fich.A3Conexion SET Estado = 'CADUCADA' WHERE Id = 1 AND Estado = 'CONECTADA' AND CaducaUtc < SYSUTCDATETIME()");
     const con = await leerConexion();
