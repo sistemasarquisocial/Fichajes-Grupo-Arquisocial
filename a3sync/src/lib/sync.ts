@@ -41,6 +41,9 @@ function anotarDiag(d: DiagRuta, r: any) {
     d.campos = [...(Array.isArray(r) ? [`[lista de ${r.length}]`] : []), ...Object.keys(o).map((k) => (conValor.includes(k) ? k : `${k}(vacío)`))];
 }
 
+/** «00000040» → «40» (para casar códigos de a3 con o sin ceros a la izquierda). */
+export const sinCeros = (v: string) => v.trim().replace(/^0+(?=.)/, "");
+
 const hoyMadrid = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid" }).format(new Date());
 const restarDias = (f: string, d: number) => new Date(Date.parse(f + "T00:00:00Z") - d * 86400000).toISOString().slice(0, 10);
 
@@ -340,6 +343,18 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
   const nContacto = detalle.filter((x) => x.contacto).length;
   const nFicha = detalle.filter((x) => x.ficha).length;
   log(`Empresa ${cc}: ${filas.length} trabajadores leídos; ${nContacto} emails y ${nFicha} fichas (puesto y contrato) a consultar`);
+  // Catálogo de puestos de la empresa (código → nombre): 1 llamada, solo si hay fichas que leer
+  const catalogo = new Map<string, string>();
+  if (nFicha) {
+    try {
+      const lp = await cli.get<any>(`/api/companies/${cc}/available-jobpositions`);
+      for (const x of Array.isArray(lp) ? lp : lp ? [lp] : [])
+        if (x?.jobCode && x?.jobDescription) catalogo.set(sinCeros(String(x.jobCode)), String(x.jobDescription).replace(/\s+/g, " ").trim().slice(0, 150));
+    } catch (e) {
+      if (!(e instanceof ErrorA3) || e.status !== 403) throw e;
+    }
+    log(`Empresa ${cc}: catálogo de puestos con ${catalogo.size} puestos`);
+  }
   let sinPermiso = false;
   // Puesto y contrato: si el usuario de a3 no tiene permiso (403) se deja vacío y se avisa una vez en el log
   const opcional = async (r: string, d: DiagRuta) => {
@@ -374,7 +389,12 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
       f.puesto = fichaPuesto(pu);
       f.contrato = fichaContrato(co);
       // Si a3 no tiene ficha de puesto, el puesto se toma del contrato (campo «puesto de trabajo» del contrato)
-      if (!f.puesto.puesto && f.contrato.puestoContrato) f.puesto.puesto = f.contrato.puestoContrato;
+      // El contrato trae el código del puesto («00000040»); el nombre sale del catálogo de puestos de la empresa
+      if (!f.puesto.puesto && f.contrato.puestoContrato) {
+        const cod = f.contrato.puestoContrato;
+        f.puesto.puestoCodigo = f.puesto.puestoCodigo ?? cod.slice(0, 20);
+        f.puesto.puesto = catalogo.get(sinCeros(cod)) ?? cod;
+      }
     }
   });
   if (sinPermiso) log(`Empresa ${cc}: el usuario de a3 no tiene permiso para leer puesto o contrato (403); se dejan vacíos`);
