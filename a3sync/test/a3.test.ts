@@ -32,7 +32,7 @@ test("ficha laboral: puesto, responsable y contrato (sin salario)", () => {
   assert.equal(fichaPuesto({ fte: null }).jornada, null);
   const co = fichaContrato({ contractCode: "189", contractDescription: "Indefinido tiempo completo", labourPeriodStartDate: "2024-03-01T00:00:00Z",
     labourPeriodEndDate: "0001-01-01T00:00:00Z", contributionType: "Normal", annualGrossAmount: 20000 });
-  assert.deepEqual(co, { contratoCodigo: "189", contrato: "Indefinido tiempo completo", contratoDesde: "2024-03-01", contratoHasta: null, tipoCotizacion: "Normal" });
+  assert.deepEqual(co, { contratoCodigo: "189", contrato: "Indefinido tiempo completo", contratoDesde: "2024-03-01", contratoHasta: null, tipoCotizacion: "Normal", puestoContrato: null });
   assert.equal(JSON.stringify(co).includes("20000"), false);
 });
 
