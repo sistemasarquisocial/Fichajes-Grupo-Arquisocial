@@ -1,6 +1,6 @@
 import { getPool, sql } from "./db";
-import { UsuarioSesion, ROLES_VEN_TODO } from "./auth";
-import { Org, aprobadorEfectivo, aprobadosPor, gestorDe, representados } from "./organizacion";
+import { UsuarioSesion } from "./auth";
+import { Org, aprobadorEfectivo, aprobadosPor, gestorDe, representados, veTodoOrg, personasRrhhDe } from "./organizacion";
 import { TipoFichaje, transicionesInvalidas } from "./jornada";
 import { FichajeEfectivo, fichajesEfectivos } from "./correcciones";
 
@@ -20,14 +20,17 @@ export function puedeResolver(org: Org, actor: UsuarioSesion, solicitanteId: num
   if (a.titular === actor.usuarioId || a.efectivo === actor.usuarioId) return true;
   const g = gestorDe(org, solicitanteId);
   if (g && representados(org, actor.usuarioId).has(g)) return true;
-  return a.titular === null && ROLES_VEN_TODO.includes(actor.rol);
+  // Sin aprobador: resuelve RRHH (el técnico de RRHH de su centro, o RRHH global) o ADMIN
+  return a.titular === null && (veTodoOrg(org, actor) || personasRrhhDe(org, actor).includes(solicitanteId));
 }
 
 /** Empleados cuyas incidencias resuelve hoy el actor. */
 export function solicitantesDe(org: Org, actor: UsuarioSesion): number[] {
   const ids = new Set(aprobadosPor(org, actor.usuarioId));
-  if (ROLES_VEN_TODO.includes(actor.rol)) {
+  if (veTodoOrg(org, actor)) {
     for (const u of org.usuarios.values()) if (u.id !== actor.usuarioId && aprobadorEfectivo(org, u.id).titular === null) ids.add(u.id);
+  } else {
+    for (const p of personasRrhhDe(org, actor)) if (aprobadorEfectivo(org, p).titular === null) ids.add(p);
   }
   return [...ids];
 }
