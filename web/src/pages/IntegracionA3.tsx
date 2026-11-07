@@ -1,3 +1,4 @@
+import { useRefrescoVisible } from "../refresco";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -70,11 +71,9 @@ function EstadoConexion({ irA }: { irA: (v: Vista) => void }) {
     cargar();
   }, []);
   const enMarcha = !!e?.sincronizaciones.some((s) => s.estado === "PENDIENTE" || s.estado === "EN_CURSO");
-  useEffect(() => {
-    if (!enMarcha) return;
-    const t = setInterval(cargar, 20000);
-    return () => clearInterval(t);
-  }, [enMarcha]);
+  const enCurso = !!e?.sincronizaciones.some((s) => s.estado === "EN_CURSO");
+  // Solo mientras se está ejecutando (de noche o lanzada a mano desde el portal), cada minuto y con la pestaña visible
+  useRefrescoVisible(cargar, 60000, enCurso);
 
   async function conectar() {
     setOcupado(true); setMsg(null);
@@ -85,7 +84,7 @@ function EstadoConexion({ irA }: { irA: (v: Vista) => void }) {
     setOcupado(true); setMsg(null);
     try {
       await api.a3Sincronizar(completa);
-      setMsg({ tipo: "exito", texto: "Sincronización en cola: el conector la empieza en menos de 5 minutos." });
+      setMsg({ tipo: "exito", texto: "Sincronización pedida: se hará esta noche (hacia las 02:30). Para no gastar recursos, el conector solo se ejecuta una vez al día." });
       await cargar();
     } catch (x) { setMsg({ tipo: "error", texto: err(x, "No se pudo pedir la sincronización") }); }
     setOcupado(false);
@@ -131,11 +130,11 @@ function EstadoConexion({ irA }: { irA: (v: Vista) => void }) {
         <div className="titulo-acciones">
           <div>
             <h3>Sincronización</h3>
-            <p className="nota">Cada noche se traen los cambios; los domingos, todo. «Completa» vuelve a leer todos los trabajadores y sus emails (unas 22.000 llamadas, varios minutos).</p>
+            <p className="nota">Una vez al día, de madrugada, se traen los cambios de a3 y se aplican las bajas. Lo que pidas aquí se hace en esa ejecución. «Completa» vuelve a leer a todos los trabajadores (unas 40.000 llamadas): úsala solo si hace falta.</p>
           </div>
           <div className="exportar-botones">
-            <button className="btn btn-secundario" disabled={ocupado || enMarcha || c.estado !== "CONECTADA"} onClick={() => sincronizar(true)}>Sincronización completa</button>
-            <button className="btn btn-primario" disabled={ocupado || enMarcha || c.estado !== "CONECTADA"} onClick={() => sincronizar(false)}>Sincronizar ahora</button>
+            <button className="btn btn-secundario" disabled={ocupado || enMarcha || c.estado !== "CONECTADA"} onClick={() => sincronizar(true)}>Completa esta noche</button>
+            <button className="btn btn-primario" disabled={ocupado || enMarcha || c.estado !== "CONECTADA"} onClick={() => sincronizar(false)}>Sincronizar esta noche</button>
           </div>
         </div>
         {!e.centrosEstructura && <p className="error" role="alert">Antes de la primera sincronización marca los centros OH (Zaragoza, Madrid, Cádiz y Oviedo) en «Centros a3»: su personal se importa como Estructura.</p>}

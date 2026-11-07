@@ -1,3 +1,4 @@
+import { useRefrescoVisible } from "../refresco";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   api, ApiError, EmpleadoHorario, PresenciaEmpleado, Turno, CandidatoCobertura, Estado,
@@ -90,11 +91,9 @@ function Ahora({ grupo, setGrupo, filtro, onAvisos, onCentros }: {
       setLista([]);
     }
   }
-  useEffect(() => {
-    cargar();
-    const t = setInterval(cargar, 60000);
-    return () => clearInterval(t);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cargar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Presencia: cada 3 min y solo con la pestaña visible
+  useRefrescoVisible(cargar, 180000);
 
   const grupos = useMemo(() => [...new Set((lista ?? []).map(grupoDe))].sort((a, b) => a.localeCompare(b, "es")), [lista]);
   const vis = (lista ?? []).filter((e) => (!grupo || grupoDe(e) === grupo) && (!filtro || `${e.nombre} ${e.apellidos}`.toLowerCase().includes(filtro.toLowerCase())));
