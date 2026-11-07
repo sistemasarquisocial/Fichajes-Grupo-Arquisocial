@@ -11,7 +11,7 @@ const VACIO = {
 
 const AYUDA_ROL: Record<Rol, string> = {
   EMPLEADO: "Ficha y ve sus datos. Si aprueba a alguien, verá también a su equipo.",
-  RRHH: "Además, supervisa los fichajes de todos los empleados.",
+  RRHH: "Además, supervisa los fichajes de los centros en los que es técnico de RRHH. Si no es técnico de ningún centro, los de todos.",
   ADMIN: "Mantenimiento de la plataforma: ve y gestiona todo.",
 };
 

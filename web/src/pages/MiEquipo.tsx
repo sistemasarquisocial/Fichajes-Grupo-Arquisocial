@@ -54,7 +54,6 @@ export default function MiEquipo() {
   const [generando, setGenerando] = useState<"" | Formato>("");
   const [error, setError] = useState("");
   const [detalle, setDetalle] = useState<EmpleadoEquipo | { id: number; nombre: string; apellidos: string } | null>(null);
-  const todos = usuario?.rol === "RRHH" || usuario?.rol === "ADMIN";
 
   function calcularPeriodo(): [string, string] | string {
     const hoy = hoyLocal();
@@ -141,7 +140,7 @@ export default function MiEquipo() {
         <div className="titulo-acciones">
           <div>
             <h2>Mi equipo</h2>
-            <p className="sub">{todos ? "Fichajes de todos los empleados del grupo." : "Fichajes de las personas que apruebas."}</p>
+            <p className="sub">{usuario?.rol === "ADMIN" ? "Fichajes de todos los empleados del grupo." : usuario?.rol === "RRHH" ? "Fichajes de las personas que supervisas." : "Fichajes de las personas que apruebas."}</p>
           </div>
         </div>
 

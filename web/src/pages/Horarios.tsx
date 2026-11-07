@@ -23,7 +23,6 @@ export default function Horarios({ onAvisos }: { onAvisos: (n: number) => void }
   const [filtro, setFiltro] = useState("");
   const [cubrir, setCubrir] = useState(false);
   const [centros, setCentros] = useState<{ id: number; nombre: string }[]>([]);
-  const todos = usuario?.rol === "RRHH" || usuario?.rol === "ADMIN";
 
   return (
     <section className="equipo">
@@ -31,7 +30,7 @@ export default function Horarios({ onAvisos }: { onAvisos: (n: number) => void }
         <div className="titulo-acciones">
           <div>
             <h2>Horarios</h2>
-            <p className="sub">{todos ? "Presencia, horarios y bolsa de horas de todo el grupo." : "Presencia, horarios y bolsa de horas de las personas que apruebas."}</p>
+            <p className="sub">{usuario?.rol === "ADMIN" ? "Presencia, horarios y bolsa de horas de todo el grupo." : usuario?.rol === "RRHH" ? "Presencia, horarios y bolsa de horas de las personas que supervisas." : "Presencia, horarios y bolsa de horas de las personas que apruebas."}</p>
           </div>
           <button className="btn btn-primario" onClick={() => setCubrir(true)} disabled={!centros.length}>Cubrir un hueco</button>
         </div>
