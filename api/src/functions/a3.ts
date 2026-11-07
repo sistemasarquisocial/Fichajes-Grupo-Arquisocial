@@ -8,7 +8,7 @@ import { auditar } from "../lib/auditoria";
 /* Integración con a3innuva Nómina (solo ADMIN). La app no habla con a3 ni guarda sus secretos:
    - Conectar: genera el state y devuelve la URL de login de Wolters Kluwer; la vuelta la atiende la Function App
      func-a3sync-prod (a3/callback), que guarda el permiso en Key Vault.
-   - Sincronizar: deja una petición en fich.A3Sincronizaciones que la Function App atiende en ≤ 5 minutos.
+   - Sincronizar: deja una petición en fich.A3Sincronizaciones que la Function App atiende en su ejecución nocturna (una vez al día).
    - El resto: estado, historial, bandeja de pendientes, centros a3 ↔ servicios, empresas y organigrama. */
 
 const ADMIN = { roles: ["ADMIN" as const] };
