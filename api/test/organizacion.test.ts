@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Org, aprobadorTitular, aprobadorEfectivo, directosDe, esAprobador, ambitoDe, aprobadosPor, candidatosSuplente, centrosZona } from "../src/lib/organizacion";
+import { Org, aprobadorTitular, aprobadorEfectivo, directosDe, esAprobador, ambitoDe, aprobadosPor, candidatosSuplente, centrosZona, veTodoOrg, personasRrhhDe, idsVisibles } from "../src/lib/organizacion";
+import { puedeVerJustificante } from "../src/lib/ausencias";
 import { puedeResolver } from "../src/lib/incidencias";
 
 /* Organización de ejemplo:
@@ -17,13 +18,29 @@ function org(): Org {
     usuarios: new Map([U(1, "ESTRUCTURA", 10, null, null), U(2, "ESTRUCTURA", 11, null, 1), U(3, "ESTRUCTURA", 11, null, null), U(4, "DELEGACION", null, 100, null),
       U(5, "DELEGACION", null, 100, null), U(6, "DELEGACION", null, 101, null), U(7, "ESTRUCTURA", 12, null, 1), U(8, "ESTRUCTURA", 12, null, null), U(9, null, null, null, null)]),
     deps: new Map([[10, { id: 10, nombre: "Dirección", managerId: 1 }], [11, { id: 11, nombre: "Gestión Norte", managerId: 2 }], [12, { id: 12, nombre: "RRHH", managerId: 7 }]]),
-    centros: new Map([[100, { id: 100, coordinadorId: 4, gestorId: 3 }], [101, { id: 101, coordinadorId: 4, gestorId: 3 }]]),
+    centros: new Map([[100, { id: 100, coordinadorId: 4, gestorId: 3, tecnicoRrhhId: null }], [101, { id: 101, coordinadorId: 4, gestorId: 3, tecnicoRrhhId: 8 }]]),
     suplencias: new Map(),
     depsQueDirige: new Map([[1, [10]], [2, [11]], [7, [12]]]),
     centrosQueCoordina: new Map([[4, [100, 101]]]),
+    centrosRrhh: new Map([[8, [101]]]),
   };
   return o;
 }
+
+test("RRHH: el técnico de RRHH solo ve sus centros; sin centros, ve todo", async () => {
+  const o = org();
+  const rrhh = (usuarioId: number) => ({ usuarioId, rol: "RRHH" } as any);
+  assert.equal(veTodoOrg(o, rrhh(7)), true); // jefa de RRHH sin centros asignados → global
+  assert.equal(veTodoOrg(o, rrhh(8)), false); // técnico del centro 101
+  assert.equal(veTodoOrg(o, { usuarioId: 8, rol: "ADMIN" } as any), true);
+  assert.equal(veTodoOrg(o, { usuarioId: 8, rol: "EMPLEADO" } as any), false);
+  assert.deepEqual(personasRrhhDe(o, rrhh(8)).sort(), [4, 6]); // personal del 101 y su coordinador
+  assert.deepEqual(personasRrhhDe(o, { usuarioId: 8, rol: "EMPLEADO" } as any), []); // sin rol RRHH no aplica
+  assert.deepEqual((await idsVisibles(rrhh(8), o))!.sort(), [4, 6]);
+  assert.equal(await idsVisibles(rrhh(7), o), null);
+  assert.equal(puedeVerJustificante(o, rrhh(8), 6), true);
+  assert.equal(puedeVerJustificante(o, rrhh(8), 5), false); // centro 100: no es su centro
+});
 
 test("cadena de aprobación", () => {
   const o = org();

@@ -65,6 +65,7 @@ test("quién resuelve: aprobador, suplente o RRHH/ADMIN si no hay aprobador", ()
     suplencias: new Map([[2, { titularId: 2, suplenteId: 4, hasta: "2099-12-31" }]]),
     depsQueDirige: new Map([[1, [10]], [2, [11]]]),
     centrosQueCoordina: new Map(),
+    centrosRrhh: new Map(),
   };
   const s = (usuarioId: number, rol: any = "EMPLEADO") => ({ usuarioId, rol } as any);
   assert.equal(puedeResolver(o, s(2), 3), true); // titular
