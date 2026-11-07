@@ -165,7 +165,7 @@ export async function exportarExcel(entrada: DatosExportacion | DatosExportacion
   const equipo = items.length > 1;
   const periodo = items[0].inf.periodo;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Fichajes · Grupo Arquisocial";
+  wb.creator = "Registro de Jornada · Grupo Arquisocial";
   wb.company = "Grupo Arquisocial";
   wb.title = equipo ? `Registro de jornada · ${items.length} empleados · ${periodo}` : `Registro de jornada · ${items[0].inf.nombreCompleto} · ${periodo}`;
   wb.created = new Date(lista[0].generadoUtc);

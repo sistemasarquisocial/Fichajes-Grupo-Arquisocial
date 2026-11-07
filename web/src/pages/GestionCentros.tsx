@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { api, ApiError, Centro, DatosCentro, Empresa, UsuarioGestion } from "../api";
 import Modal from "../components/Modal";
+import SelectorPersona, { OpcionPersona } from "../components/SelectorPersona";
 
 type Mensaje = { tipo: "exito" | "error"; texto: string } | null;
 
@@ -31,6 +32,10 @@ const normalizar = (d: DatosCentro): DatosCentro => ({
   telefono: limpiar(d.telefono),
 });
 
+type Vista = "lista" | "empresa" | "comunidad";
+const SIN_COMUNIDAD = "Sin comunidad (CP desconocido)";
+const porTexto = (a: string, b: string) => a.localeCompare(b, "es");
+
 const direccionCompleta = (c: { direccion: string | null; codigoPostal: string | null; ciudad: string | null }) =>
   [c.direccion, [c.codigoPostal, c.ciudad].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
@@ -38,6 +43,11 @@ export default function GestionCentros() {
   const [centros, setCentros] = useState<Centro[] | null>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [filtro, setFiltro] = useState("");
+  const [fEmpresa, setFEmpresa] = useState("");
+  const [fComunidad, setFComunidad] = useState("");
+  const [fTipo, setFTipo] = useState<"" | "ESTRUCTURA" | "DELEGACION">("");
+  const [fEstado, setFEstado] = useState<"" | "ACTIVO" | "CERRADO">("");
+  const [vista, setVista] = useState<Vista>("lista");
   const [mensaje, setMensaje] = useState<Mensaje>(null);
   const [asistente, setAsistente] = useState(false);
   const [editando, setEditando] = useState<Centro | null>(null);
@@ -56,12 +66,37 @@ export default function GestionCentros() {
   }
   useEffect(() => { cargar(); }, []);
 
+  const comunidades = useMemo(
+    () => [...new Set((centros ?? []).map((c) => c.comunidad ?? SIN_COMUNIDAD))].sort(porTexto),
+    [centros]
+  );
+  const empresasConCentros = useMemo(() => [...new Set((centros ?? []).map((c) => c.empresa))].sort(porTexto), [centros]);
+
   const filtrados = useMemo(() => {
     const q = filtro.trim().toLowerCase();
     if (!centros) return [];
-    if (!q) return centros;
-    return centros.filter((c) => `${c.codigoServicio ?? ""} ${c.nombre} ${c.empresa} ${c.ciudad ?? ""} ${c.direccion ?? ""} ${c.coordinador ?? ""} ${c.gestor ?? ""}`.toLowerCase().includes(q));
-  }, [centros, filtro]);
+    return centros.filter(
+      (c) =>
+        (!fEmpresa || c.empresa === fEmpresa) &&
+        (!fComunidad || (c.comunidad ?? SIN_COMUNIDAD) === fComunidad) &&
+        (!fTipo || (fTipo === "ESTRUCTURA") === c.esEstructura) &&
+        (!fEstado || (fEstado === "ACTIVO") === c.activo) &&
+        (!q ||
+          `${c.codigoServicio ?? ""} ${c.codigoA3 ?? ""} ${c.nombre} ${c.empresa} ${c.ciudad ?? ""} ${c.direccion ?? ""} ${c.comunidad ?? ""} ${c.coordinador ?? ""} ${c.gestor ?? ""} ${c.tecnicoRrhh ?? ""}`
+            .toLowerCase()
+            .includes(q))
+    );
+  }, [centros, filtro, fEmpresa, fComunidad, fTipo, fEstado]);
+
+  /** Grupos según la vista: una sola lista o agrupados por empresa / comunidad autónoma. */
+  const grupos = useMemo(() => {
+    if (vista === "lista") return [{ titulo: "", centros: filtrados }];
+    const clave = (c: Centro) => (vista === "empresa" ? c.empresa : c.comunidad ?? SIN_COMUNIDAD);
+    const m = new Map<string, Centro[]>();
+    for (const c of filtrados) m.set(clave(c), [...(m.get(clave(c)) ?? []), c]);
+    return [...m.entries()].sort(([a], [b]) => porTexto(a, b)).map(([titulo, cs]) => ({ titulo, centros: cs }));
+  }, [filtrados, vista]);
+  const hayFiltros = !!(filtro || fEmpresa || fComunidad || fTipo || fEstado);
 
   async function cambiarEstado(c: Centro) {
     setConfirmarEstado(null);
@@ -92,34 +127,89 @@ export default function GestionCentros() {
         ) : (
           <>
             <div className="tabla-buscador">
-              <input className="buscador" placeholder="Buscar por código, nombre, empresa, ciudad, coordinador o gestor…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+              <input className="buscador" placeholder="Buscar por código, código a3, nombre, empresa, ciudad o responsable…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+            </div>
+            <div className="centros-filtros">
+              <label>
+                Empresa
+                <select value={fEmpresa} onChange={(e) => setFEmpresa(e.target.value)}>
+                  <option value="">Todas</option>
+                  {empresasConCentros.map((e) => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </label>
+              <label>
+                Comunidad autónoma
+                <select value={fComunidad} onChange={(e) => setFComunidad(e.target.value)}>
+                  <option value="">Todas</option>
+                  {comunidades.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label>
+                Tipo
+                <select value={fTipo} onChange={(e) => setFTipo(e.target.value as typeof fTipo)}>
+                  <option value="">Todos</option>
+                  <option value="ESTRUCTURA">Estructura</option>
+                  <option value="DELEGACION">Delegación</option>
+                </select>
+              </label>
+              <label>
+                Estado
+                <select value={fEstado} onChange={(e) => setFEstado(e.target.value as typeof fEstado)}>
+                  <option value="">Todos</option>
+                  <option value="ACTIVO">Activos</option>
+                  <option value="CERRADO">Cerrados</option>
+                </select>
+              </label>
+              <label>
+                Ver
+                <select value={vista} onChange={(e) => setVista(e.target.value as Vista)}>
+                  <option value="lista">Lista</option>
+                  <option value="empresa">Agrupar por empresa</option>
+                  <option value="comunidad">Agrupar por comunidad</option>
+                </select>
+              </label>
+              <span className="nota centros-total">
+                {filtrados.length} de {centros.length} centros
+                {hayFiltros && <> · <button className="btn-link" onClick={() => { setFiltro(""); setFEmpresa(""); setFComunidad(""); setFTipo(""); setFEstado(""); }}>Quitar filtros</button></>}
+              </span>
             </div>
             {filtrados.length === 0 ? (
-              <p className="nota vacio">{centros.length ? "Ningún centro coincide con la búsqueda." : "Todavía no hay centros."}</p>
+              <p className="nota vacio">{centros.length ? "Ningún centro coincide con la búsqueda o los filtros." : "Todavía no hay centros."}</p>
             ) : (
               <table className="tabla">
                 <thead>
-                  <tr><th>Código</th><th>Centro</th><th>Empresa</th><th>Coordinador / Gestor</th><th>Dirección</th><th>Estado</th><th /></tr>
+                  <tr><th>Códigos</th><th>Centro</th><th>Empresa</th><th>Responsables</th><th>Dirección</th><th>Estado</th><th /></tr>
                 </thead>
                 <tbody>
-                  {filtrados.map((c) => (
-                    <tr key={c.id} className={c.activo ? "" : "inactivo"}>
-                      <td>{c.codigoServicio ? <span className="codigo">{c.codigoServicio}</span> : <span className="chip chip-pausa_inicio">Sin código</span>}</td>
-                      <td><strong>{c.nombre}</strong><div className="nota">{c.usuariosActivos} usuario(s) activo(s)</div></td>
-                      <td>{c.empresa}</td>
-                      <td>
-                        <div>{c.coordinador ? <strong>{c.coordinador}</strong> : <span className="chip chip-pausa_inicio">Sin coordinador</span>}</div>
-                        <div className="nota">{c.gestor ? `Gestor: ${c.gestor}` : "Sin gestor"}</div>
-                      </td>
-                      <td>{direccionCompleta(c) || <span className="nota">—</span>}{c.telefono && <div className="nota">{c.telefono}</div>}</td>
-                      <td><span className={`chip ${c.activo ? "chip-activa" : "chip-inactiva"}`}>{c.activo ? "Activo" : "Inactivo"}</span></td>
-                      <td className="acciones-fila">
-                        <button className="btn-link" onClick={() => { setMensaje(null); setEditando(c); }}>Editar</button>
-                        <button className="btn-link" onClick={() => { setMensaje(null); setResponsables(c); }}>Coordinador y gestor</button>
-                        <button className="btn-link" onClick={() => { setMensaje(null); setControl(c); }}>Control horario</button>
-                        <button className="btn-link" onClick={() => setConfirmarEstado(c)}>{c.activo ? "Desactivar" : "Activar"}</button>
-                      </td>
-                    </tr>
+                  {grupos.map((g) => (
+                    <Fragment key={g.titulo || "todos"}>
+                      {g.titulo && (
+                        <tr className="grupo"><td colSpan={7}>{g.titulo} <span className="nota">· {g.centros.length} centro(s)</span></td></tr>
+                      )}
+                      {g.centros.map((c) => (
+                        <tr key={c.id} className={c.activo ? "" : "inactivo"}>
+                          <td className="codigos">
+                            <div title="Código de servicio">{c.codigoServicio ? <span className="codigo">{c.codigoServicio}</span> : <span className="chip chip-pausa_inicio">Sin código</span>}</div>
+                            <div className="nota" title="Código del centro en a3 (empresa-centro)">a3: {c.codigoA3 ? <span className="codigo">{c.codigoA3}</span> : "—"}</div>
+                          </td>
+                          <td><strong>{c.nombre}</strong>{c.esEstructura && <> <span className="chip chip-activa">Estructura</span></>}<div className="nota">{c.usuariosActivos} usuario(s) activo(s)</div></td>
+                          <td>{c.empresa}</td>
+                          <td className="responsables">
+                            <div>{c.coordinador ? <><span className="nota">Coord.:</span> <strong>{c.coordinador}</strong></> : <span className="chip chip-pausa_inicio">Sin coordinador</span>}</div>
+                            <div className="nota">{c.gestor ? `Gestor: ${c.gestor}` : "Sin gestor"}</div>
+                            <div className="nota">{c.tecnicoRrhh ? `RRHH: ${c.tecnicoRrhh}` : "Sin técnico de RRHH"}</div>
+                          </td>
+                          <td>{direccionCompleta(c) || <span className="nota">—</span>}{c.comunidad && <div className="nota">{c.comunidad}</div>}{c.telefono && <div className="nota">{c.telefono}</div>}</td>
+                          <td><span className={`chip ${c.activo ? "chip-activa" : "chip-inactiva"}`}>{c.activo ? "Activo" : "Cerrado"}</span></td>
+                          <td className="acciones-fila">
+                            <button className="btn-link" onClick={() => { setMensaje(null); setEditando(c); }}>Editar</button>
+                            <button className="btn-link" onClick={() => { setMensaje(null); setResponsables(c); }}>Responsables</button>
+                            <button className="btn-link" onClick={() => { setMensaje(null); setControl(c); }}>Control horario</button>
+                            <button className="btn-link" onClick={() => setConfirmarEstado(c)}>{c.activo ? "Desactivar" : "Activar"}</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -172,7 +262,7 @@ export default function GestionCentros() {
           centro={responsables}
           onCerrar={() => setResponsables(null)}
           onGuardado={async () => {
-            setMensaje({ tipo: "exito", texto: `Coordinador y gestor de «${responsables.nombre}» actualizados.` });
+            setMensaje({ tipo: "exito", texto: `Responsables de «${responsables.nombre}» actualizados.` });
             setResponsables(null);
             await cargar();
           }}
@@ -357,11 +447,12 @@ function EditarCentro({ centro, empresas, centros, onCerrar, onGuardado }: { cen
   );
 }
 
-/* ---------- Coordinador y gestor del centro ---------- */
+/* ---------- Responsables del centro: coordinador, gestor y técnico de RRHH ---------- */
 function ResponsablesCentro({ centro, onCerrar, onGuardado }: { centro: Centro; onCerrar: () => void; onGuardado: () => void }) {
   const [usuarios, setUsuarios] = useState<UsuarioGestion[] | null>(null);
   const [coordinadorId, setCoordinadorId] = useState(centro.coordinadorId ? String(centro.coordinadorId) : "");
   const [gestorId, setGestorId] = useState(centro.gestorId ? String(centro.gestorId) : "");
+  const [tecnicoRrhhId, setTecnicoRrhhId] = useState(centro.tecnicoRrhhId ? String(centro.tecnicoRrhhId) : "");
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
@@ -373,14 +464,22 @@ function ResponsablesCentro({ centro, onCerrar, onGuardado }: { centro: Centro; 
   // Primero los del propio centro (coordinador) y los de estructura (gestor)
   const opcCoord = [...activos.filter((u) => u.centroId === centro.id), ...activos.filter((u) => u.centroId !== centro.id)];
   const opcGestor = [...activos.filter((u) => u.tipoPerfil === "ESTRUCTURA"), ...activos.filter((u) => u.tipoPerfil !== "ESTRUCTURA")];
-  const etiqueta = (u: UsuarioGestion) => `${u.nombre} ${u.apellidos}${u.tipoPerfil === "ESTRUCTURA" && u.departamento ? ` · ${u.departamento}` : u.centro ? ` · ${u.centro}` : ""}`;
+  const opcion = (u: UsuarioGestion): OpcionPersona => ({
+    id: u.id,
+    nombre: `${u.nombre} ${u.apellidos}`,
+    detalle: u.tipoPerfil === "ESTRUCTURA" && u.departamento ? u.departamento : u.centro,
+  });
 
   async function guardar() {
     setError("");
     if (coordinadorId && coordinadorId === gestorId) return setError("El coordinador y el gestor no pueden ser la misma persona.");
     setGuardando(true);
     try {
-      await api.responsablesCentro(centro.id, { coordinadorId: coordinadorId ? Number(coordinadorId) : null, gestorId: gestorId ? Number(gestorId) : null });
+      await api.responsablesCentro(centro.id, {
+        coordinadorId: coordinadorId ? Number(coordinadorId) : null,
+        gestorId: gestorId ? Number(gestorId) : null,
+        tecnicoRrhhId: tecnicoRrhhId ? Number(tecnicoRrhhId) : null,
+      });
       onGuardado();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar");
@@ -389,27 +488,26 @@ function ResponsablesCentro({ centro, onCerrar, onGuardado }: { centro: Centro; 
   }
 
   return (
-    <Modal titulo={`Coordinador y gestor · ${centro.codigoServicio ? `${centro.codigoServicio} · ` : ""}${centro.nombre}`} onCerrar={onCerrar} ancho>
+    <Modal titulo={`Responsables · ${centro.codigoServicio ? `${centro.codigoServicio} · ` : ""}${centro.nombre}`} onCerrar={onCerrar} ancho>
       {!usuarios && !error ? (
         <div className="centrado-bloque"><div className="spinner" aria-label="Cargando" /></div>
       ) : (
         <div className="form-modal">
           <label>
             Coordinador del centro
-            <select value={coordinadorId} onChange={(e) => setCoordinadorId(e.target.value)}>
-              <option value="">(Sin coordinador)</option>
-              {opcCoord.map((u) => <option key={u.id} value={u.id}>{etiqueta(u)}</option>)}
-            </select>
+            <SelectorPersona personas={opcCoord.map(opcion)} valor={coordinadorId} onCambio={setCoordinadorId} vacio="Sin coordinador" />
           </label>
           <p className="nota">Aprueba a los empleados del centro. Puede coordinar varios centros, siempre con el mismo gestor.</p>
           <label>
             Gestor
-            <select value={gestorId} onChange={(e) => setGestorId(e.target.value)}>
-              <option value="">(Sin gestor)</option>
-              {opcGestor.map((u) => <option key={u.id} value={u.id}>{etiqueta(u)}</option>)}
-            </select>
+            <SelectorPersona personas={opcGestor.map(opcion)} valor={gestorId} onCambio={setGestorId} vacio="Sin gestor" />
           </label>
           <p className="nota">Aprueba al coordinador y ve y puede aprobar a todo el personal del centro. Al gestor le aprueba el manager de su departamento de Gestión (director territorial), que ve a todo el personal de su zona.</p>
+          <label>
+            Técnico de RRHH
+            <SelectorPersona personas={opcGestor.map(opcion)} valor={tecnicoRrhhId} onCambio={setTecnicoRrhhId} vacio="Sin técnico de RRHH" />
+          </label>
+          <p className="nota">Persona de RRHH de referencia para el centro.</p>
           {error && <p className="error" role="alert">{error}</p>}
           <div className="modal-acciones">
             <button type="button" className="btn btn-secundario" onClick={onCerrar}>Cancelar</button>

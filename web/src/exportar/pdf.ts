@@ -253,7 +253,7 @@ export async function exportarPdf(entrada: DatosExportacion | DatosExportacion[]
   doc.setProperties({
     title: equipo ? `Registro de jornada · ${items.length} empleados · ${periodo}` : `Registro de jornada · ${items[0].inf.nombreCompleto} · ${periodo}`,
     author: "Grupo Arquisocial",
-    creator: "Fichajes · Grupo Arquisocial",
+    creator: "Registro de Jornada · Grupo Arquisocial",
     subject: "Registro de jornada",
   });
 

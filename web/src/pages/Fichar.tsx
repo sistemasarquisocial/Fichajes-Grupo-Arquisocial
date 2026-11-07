@@ -1,3 +1,4 @@
+import { useRefrescoVisible } from "../refresco";
 import { notaCorreccion } from "../components/ChipFichaje";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, EstadoFichaje, TipoFichaje, Aviso, TramoDia, hora, duracion, ETIQUETA_TIPO, obtenerUbicacion, TEXTO_UBICACION } from "../api";
@@ -34,9 +35,10 @@ export default function Fichar() {
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
     const t = setInterval(() => setAhora(new Date()), 1000);
-    const r = setInterval(cargar, 60000);
-    return () => { clearInterval(t); clearInterval(r); };
-  }, [cargar]);
+    return () => clearInterval(t);
+  }, []);
+  // El estado solo cambia al fichar; se relee cada 5 min con la pestaña visible (por si ficha desde otro dispositivo)
+  useRefrescoVisible(cargar, 300000);
 
   async function fichar(tipo: TipoFichaje) {
     if (tipo === "SALIDA" && !confirm("¿Confirmas la salida y fin de tu jornada?")) return;

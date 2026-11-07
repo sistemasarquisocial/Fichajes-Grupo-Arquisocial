@@ -11,13 +11,15 @@ import { fechaLocal } from "./jornada";
    "Mi equipo" = directos de la persona (y los de los titulares a los que suple hoy).
    Ámbito (lo que ve y gestiona): sus directos + todo el personal de delegación de los centros que gestiona
    (gestor) + el de los centros de los gestores que dirige (director territorial).
-   El gestor también puede aprobar al personal de sus centros, además del coordinador. */
+   El gestor también puede aprobar al personal de sus centros, además del coordinador.
+   RRHH: si es técnico de RRHH de algún centro, supervisa solo a las personas de esos centros (además de su ámbito
+   normal); si no es técnico de ningún centro, supervisa a todos (RRHH global). ADMIN ve todo. */
 
 export type TipoPerfil = "ESTRUCTURA" | "DELEGACION";
 
 interface U { id: number; nombre: string; apellidos: string; activo: boolean; tipo: TipoPerfil | null; departamentoId: number | null; centroId: number | null; managerId: number | null }
 interface Dep { id: number; nombre: string; managerId: number | null }
-interface Cen { id: number; coordinadorId: number | null; gestorId: number | null }
+interface Cen { id: number; coordinadorId: number | null; gestorId: number | null; tecnicoRrhhId: number | null }
 interface Sup { titularId: number; suplenteId: number; hasta: string }
 
 export interface Org {
@@ -28,17 +30,38 @@ export interface Org {
   suplencias: Map<number, Sup>;
   depsQueDirige: Map<number, number[]>;
   centrosQueCoordina: Map<number, number[]>;
+  /** Centros de los que es técnico de RRHH cada persona */
+  centrosRrhh: Map<number, number[]>;
 }
 
 const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 
-export async function cargarOrg(): Promise<Org> {
+/* La organización (≈10.000 personas) se lee una vez y se reutiliza 60 s en la instancia: ahorra consultas en cada
+   página. Cualquier petición que modifica datos (POST/PUT/DELETE) la invalida (ver conSesion en http.ts). */
+const TTL_ORG_MS = 60_000;
+let cacheOrg: { t: number; p: Promise<Org> } | null = null;
+
+export function invalidarOrg() {
+  cacheOrg = null;
+}
+
+export function cargarOrg(): Promise<Org> {
+  if (cacheOrg && Date.now() - cacheOrg.t < TTL_ORG_MS) return cacheOrg.p;
+  const p = leerOrg();
+  cacheOrg = { t: Date.now(), p };
+  p.catch(() => {
+    if (cacheOrg?.p === p) cacheOrg = null;
+  });
+  return p;
+}
+
+async function leerOrg(): Promise<Org> {
   const pool = await getPool();
   const hoy = fechaLocal(new Date(), TZ());
   const [u, d, c, s] = await Promise.all([
     pool.request().query("SELECT UsuarioId, Nombre, Apellidos, Activo, TipoPerfil, DepartamentoId, CentroId, ManagerId FROM fich.Usuarios"),
     pool.request().query("SELECT DepartamentoId, Nombre, ManagerId FROM fich.Departamentos"),
-    pool.request().query("SELECT CentroId, CoordinadorId, GestorId FROM fich.Centros"),
+    pool.request().query("SELECT CentroId, CoordinadorId, GestorId, TecnicoRrhhId FROM fich.Centros"),
     pool
       .request()
       .input("hoy", hoy)
@@ -55,6 +78,7 @@ export async function cargarOrg(): Promise<Org> {
     suplencias: new Map(),
     depsQueDirige: new Map(),
     centrosQueCoordina: new Map(),
+    centrosRrhh: new Map(),
   };
   for (const x of u.recordset as any[])
     org.usuarios.set(x.UsuarioId, { id: x.UsuarioId, nombre: x.Nombre, apellidos: x.Apellidos, activo: !!x.Activo, tipo: x.TipoPerfil, departamentoId: x.DepartamentoId, centroId: x.CentroId, managerId: x.ManagerId });
@@ -63,7 +87,8 @@ export async function cargarOrg(): Promise<Org> {
     if (x.ManagerId) org.depsQueDirige.set(x.ManagerId, [...(org.depsQueDirige.get(x.ManagerId) ?? []), x.DepartamentoId]);
   }
   for (const x of c.recordset as any[]) {
-    org.centros.set(x.CentroId, { id: x.CentroId, coordinadorId: x.CoordinadorId, gestorId: x.GestorId });
+    org.centros.set(x.CentroId, { id: x.CentroId, coordinadorId: x.CoordinadorId, gestorId: x.GestorId, tecnicoRrhhId: x.TecnicoRrhhId ?? null });
+    if (x.TecnicoRrhhId) org.centrosRrhh.set(x.TecnicoRrhhId, [...(org.centrosRrhh.get(x.TecnicoRrhhId) ?? []), x.CentroId]);
     if (x.CoordinadorId) org.centrosQueCoordina.set(x.CoordinadorId, [...(org.centrosQueCoordina.get(x.CoordinadorId) ?? []), x.CentroId]);
   }
   for (const x of s.recordset as any[]) if (!org.suplencias.has(x.TitularId)) org.suplencias.set(x.TitularId, { titularId: x.TitularId, suplenteId: x.SuplenteId, hasta: x.Hasta });
@@ -193,10 +218,38 @@ export const nombreDe = (org: Org, id: number | null) => {
   return u ? `${u.nombre} ${u.apellidos}` : null;
 };
 
-/** Empleados cuyos fichajes puede ver: null = todos (RRHH y ADMIN); si no, sus directos. */
-export async function idsVisibles(u: UsuarioSesion): Promise<number[] | null> {
-  if (ROLES_VEN_TODO.includes(u.rol)) return null;
-  return ambitoDe(await cargarOrg(), u.usuarioId);
+/** ¿Supervisa a todo el grupo? ADMIN siempre; RRHH solo si no es técnico de RRHH de ningún centro. */
+export function veTodoOrg(org: Org, u: Pick<UsuarioSesion, "usuarioId" | "rol">): boolean {
+  if (u.rol === "ADMIN") return true;
+  return ROLES_VEN_TODO.includes(u.rol) && !(org.centrosRrhh.get(u.usuarioId) ?? []).length;
+}
+
+/** Centros que supervisa como técnico de RRHH (solo si tiene rol RRHH). */
+export function centrosRrhhDe(org: Org, u: Pick<UsuarioSesion, "usuarioId" | "rol">): number[] {
+  return u.rol === "RRHH" ? org.centrosRrhh.get(u.usuarioId) ?? [] : [];
+}
+
+/** Personas de los centros en los que es técnico de RRHH: cualquiera con ese centro (delegación o sede) y sus coordinadores. */
+export function personasRrhhDe(org: Org, u: Pick<UsuarioSesion, "usuarioId" | "rol">): number[] {
+  const centros = new Set(centrosRrhhDe(org, u));
+  if (!centros.size) return [];
+  const r = new Set<number>();
+  for (const x of org.usuarios.values()) if (x.centroId && centros.has(x.centroId)) r.add(x.id);
+  for (const c of centros) {
+    const co = org.centros.get(c)?.coordinadorId;
+    if (co) r.add(co);
+  }
+  r.delete(u.usuarioId);
+  return [...r];
+}
+
+/** Empleados cuyos fichajes puede ver: null = todos (ADMIN y RRHH global); si no, su ámbito (+ sus centros si es técnico de RRHH). */
+export async function idsVisibles(u: UsuarioSesion, orgDada?: Org): Promise<number[] | null> {
+  const org = orgDada ?? (await cargarOrg());
+  if (veTodoOrg(org, u)) return null;
+  const r = new Set(ambitoDe(org, u.usuarioId));
+  for (const p of personasRrhhDe(org, u)) r.add(p);
+  return [...r];
 }
 
 /** ¿Puede ver los fichajes de este empleado? */

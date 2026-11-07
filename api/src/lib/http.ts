@@ -1,5 +1,6 @@
 import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { usuarioDeSesion, UsuarioSesion, Rol } from "./auth";
+import { invalidarOrg } from "./organizacion";
 
 export const json = (status: number, body: unknown, extra: Partial<HttpResponseInit> = {}): HttpResponseInit => ({
   status,
@@ -42,7 +43,12 @@ export function conSesion(handler: Handler, opts: Opciones = {}) {
         return error(403, "Debes cambiar tu contraseña antes de continuar");
       }
       if (opts.roles && !opts.roles.includes(usuario.rol)) return error(403, "No tienes permisos para esta acción");
-      return await handler(req, ctx, usuario);
+      try {
+        return await handler(req, ctx, usuario);
+      } finally {
+        // Si la petición puede haber cambiado personas, centros o responsables, la organización se vuelve a leer
+        if (req.method !== "GET") invalidarOrg();
+      }
     } catch (e: any) {
       ctx.error(e);
       return error(500, "Error interno");

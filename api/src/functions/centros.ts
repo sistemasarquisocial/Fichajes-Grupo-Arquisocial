@@ -8,6 +8,7 @@ import { comunidadDeCP, NOMBRE_COMUNIDAD } from "../lib/calendario";
 /* Centros de trabajo (solo ADMIN).
    - Listar, crear, editar, activar-desactivar.
    - Coordinador (uno por centro, aprueba a los empleados del centro) y gestor (aprueba al coordinador).
+   - Técnico de RRHH asignado al centro (solo asignación; no aprueba).
    - Código de servicio: numérico, obligatorio en altas y único en todo el grupo. */
 
 const GESTORES: Rol[] = ["ADMIN"];
@@ -80,22 +81,24 @@ app.http("gestionCentrosListar", {
     async () => {
       const pool = await getPool();
       const r = await pool.request().query(
-        `SELECT c.CentroId AS id, c.CodigoServicio AS codigoServicio, c.Nombre AS nombre, c.EmpresaId AS empresaId, e.Nombre AS empresa,
+        `SELECT c.CentroId AS id, c.CodigoServicio AS codigoServicio, c.CodigoA3 AS codigoA3, c.EsEstructura AS esEstructura, c.Nombre AS nombre, c.EmpresaId AS empresaId, e.Nombre AS empresa,
                 c.Direccion AS direccion, c.CodigoPostal AS codigoPostal, c.Ciudad AS ciudad, c.Telefono AS telefono,
                 c.Activo AS activo, c.CreadoUtc AS creadoUtc,
                 c.CoordinadorId AS coordinadorId, CASE WHEN co.UsuarioId IS NULL THEN NULL ELSE co.Nombre + N' ' + co.Apellidos END AS coordinador,
                 c.GestorId AS gestorId, CASE WHEN g.UsuarioId IS NULL THEN NULL ELSE g.Nombre + N' ' + g.Apellidos END AS gestor,
+                c.TecnicoRrhhId AS tecnicoRrhhId, CASE WHEN t.UsuarioId IS NULL THEN NULL ELSE t.Nombre + N' ' + t.Apellidos END AS tecnicoRrhh,
                 c.MargenMinutos AS margenMinutos, c.EscaladoMinutos AS escaladoMinutos, c.UmbralSobrecargaHoras AS umbralSobrecargaHoras,
                 c.MaxHorasSinSalida AS maxHorasSinSalida,
                 (SELECT COUNT(*) FROM fich.Usuarios u WHERE u.CentroId = c.CentroId AND u.Activo = 1) AS usuariosActivos
            FROM fich.Centros c JOIN fich.Empresas e ON e.EmpresaId = c.EmpresaId
            LEFT JOIN fich.Usuarios co ON co.UsuarioId = c.CoordinadorId
            LEFT JOIN fich.Usuarios g ON g.UsuarioId = c.GestorId
+           LEFT JOIN fich.Usuarios t ON t.UsuarioId = c.TecnicoRrhhId
           ORDER BY c.Activo DESC, e.Nombre, c.Nombre`
       );
       return json(200, r.recordset.map((x: any) => {
         const cm = comunidadDeCP(x.codigoPostal);
-        return { ...x, activo: !!x.activo, comunidad: cm ? NOMBRE_COMUNIDAD[cm] : null };
+        return { ...x, activo: !!x.activo, esEstructura: !!x.esEstructura, comunidad: cm ? NOMBRE_COMUNIDAD[cm] : null };
       }));
     },
     { roles: GESTORES }
@@ -181,7 +184,7 @@ app.http("gestionCentrosEstado", {
   ),
 });
 
-/* ---------- Coordinador y gestor del centro ---------- */
+/* ---------- Responsables del centro: coordinador, gestor y técnico de RRHH ---------- */
 app.http("gestionCentrosResponsables", {
   methods: ["PUT"],
   authLevel: "anonymous",
@@ -193,18 +196,19 @@ app.http("gestionCentrosResponsables", {
       const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
       const coordinadorId = num(b?.coordinadorId);
       const gestorId = num(b?.gestorId);
-      if ((coordinadorId !== null && !Number.isInteger(coordinadorId)) || (gestorId !== null && !Number.isInteger(gestorId))) return error(400, "Datos no válidos");
+      const tecnicoRrhhId = num(b?.tecnicoRrhhId);
+      if ([coordinadorId, gestorId, tecnicoRrhhId].some((v) => v !== null && !Number.isInteger(v))) return error(400, "Datos no válidos");
       if (coordinadorId !== null && coordinadorId === gestorId) return error(400, "El coordinador y el gestor no pueden ser la misma persona");
 
       const pool = await getPool();
-      const act = await pool.request().input("id", sql.Int, id).query("SELECT Nombre, CoordinadorId, GestorId FROM fich.Centros WHERE CentroId = @id");
+      const act = await pool.request().input("id", sql.Int, id).query("SELECT Nombre, CoordinadorId, GestorId, TecnicoRrhhId FROM fich.Centros WHERE CentroId = @id");
       const actual = act.recordset[0];
       if (!actual) return error(404, "Centro no encontrado");
 
-      for (const [uid, etiqueta] of [[coordinadorId, "coordinador"], [gestorId, "gestor"]] as const) {
+      for (const [uid, etiqueta] of [[coordinadorId, "El coordinador"], [gestorId, "El gestor"], [tecnicoRrhhId, "El técnico de RRHH"]] as const) {
         if (uid === null) continue;
         const r = await pool.request().input("u", sql.Int, uid).query("SELECT 1 AS ok FROM fich.Usuarios WHERE UsuarioId = @u AND Activo = 1");
-        if (!r.recordset.length) return error(400, `El ${etiqueta} debe ser un usuario activo`);
+        if (!r.recordset.length) return error(400, `${etiqueta} debe ser un usuario activo`);
       }
       // Un coordinador puede llevar varios centros, pero siempre con el mismo gestor
       if (coordinadorId !== null && gestorId !== null) {
@@ -225,13 +229,14 @@ app.http("gestionCentrosResponsables", {
         .input("id", sql.Int, id)
         .input("co", sql.Int, coordinadorId)
         .input("g", sql.Int, gestorId)
-        .query("UPDATE fich.Centros SET CoordinadorId = @co, GestorId = @g WHERE CentroId = @id");
+        .input("t", sql.Int, tecnicoRrhhId)
+        .query("UPDATE fich.Centros SET CoordinadorId = @co, GestorId = @g, TecnicoRrhhId = @t WHERE CentroId = @id");
       await auditar(
         actor.usuarioId,
         "EDITAR_RESPONSABLES_CENTRO",
         "Centro",
         id,
-        `antes: coordinador=${actual.CoordinadorId ?? "-"} gestor=${actual.GestorId ?? "-"} | despues: coordinador=${coordinadorId ?? "-"} gestor=${gestorId ?? "-"}`,
+        `antes: coordinador=${actual.CoordinadorId ?? "-"} gestor=${actual.GestorId ?? "-"} rrhh=${actual.TecnicoRrhhId ?? "-"} | despues: coordinador=${coordinadorId ?? "-"} gestor=${gestorId ?? "-"} rrhh=${tecnicoRrhhId ?? "-"}`,
         ipCliente(req)
       );
       return json(200, { ok: true });

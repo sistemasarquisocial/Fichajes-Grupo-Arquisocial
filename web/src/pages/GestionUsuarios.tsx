@@ -1,14 +1,17 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, Centro, Departamento, Empresa, Rol, ROLES, ETIQUETA_ROL, ETIQUETA_PERFIL, TipoPerfil, UsuarioGestion, generarPasswordTemporal } from "../api";
+import SelectorPersona from "../components/SelectorPersona";
+import ListadoUsuarios from "../components/ListadoUsuarios";
+import Modal from "../components/Modal";
 
 const VACIO = {
-  email: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
+  email: "", emailCorporativo: "", nombre: "", apellidos: "", empresaId: "", centroId: "", rol: "EMPLEADO" as Rol, activo: true,
   tipoPerfil: "" as TipoPerfil | "", departamentoId: "", managerId: "",
 };
 
 const AYUDA_ROL: Record<Rol, string> = {
   EMPLEADO: "Ficha y ve sus datos. Si aprueba a alguien, verá también a su equipo.",
-  RRHH: "Además, supervisa los fichajes de todos los empleados.",
+  RRHH: "Además, supervisa los fichajes de los centros en los que es técnico de RRHH. Si no es técnico de ningún centro, los de todos.",
   ADMIN: "Mantenimiento de la plataforma: ve y gestiona todo.",
 };
 
@@ -17,7 +20,6 @@ export default function GestionUsuarios() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
-  const [filtro, setFiltro] = useState("");
   const [editando, setEditando] = useState<UsuarioGestion | "nuevo" | null>(null);
   const [form, setForm] = useState(VACIO);
   const [pwTemporal, setPwTemporal] = useState("");
@@ -29,13 +31,6 @@ export default function GestionUsuarios() {
     setUsuarios(u); setEmpresas(e); setCentros(c); setDepartamentos(d);
   }
   useEffect(() => { cargar().catch((err) => setMensaje({ tipo: "error", texto: err.message })); }, []);
-
-  const filtrados = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
-    if (!usuarios) return [];
-    if (!q) return usuarios;
-    return usuarios.filter((u) => `${u.nombre} ${u.apellidos} ${u.email} ${u.empresa} ${u.centro ?? ""} ${u.departamento ?? ""} ${u.aprobador ?? ""}`.toLowerCase().includes(q));
-  }, [usuarios, filtro]);
 
   const centrosEmpresa = centros.filter((c) => String(c.empresaId) === String(form.empresaId) && c.activo);
   const candidatosManager = (usuarios ?? []).filter((u) => u.activo && (editando === "nuevo" || !editando || u.id !== editando.id));
@@ -49,7 +44,7 @@ export default function GestionUsuarios() {
     setCredenciales(null);
   }
   function abrirEditar(u: UsuarioGestion) {
-    setForm({ email: u.email, nombre: u.nombre, apellidos: u.apellidos, empresaId: String(u.empresaId), centroId: u.centroId ? String(u.centroId) : "", rol: u.rol, activo: !!u.activo,
+    setForm({ email: u.email, emailCorporativo: u.emailCorporativo ?? "", nombre: u.nombre, apellidos: u.apellidos, empresaId: String(u.empresaId), centroId: u.centroId ? String(u.centroId) : "", rol: u.rol, activo: !!u.activo,
       tipoPerfil: u.tipoPerfil ?? "", departamentoId: u.departamentoId ? String(u.departamentoId) : "", managerId: u.managerId ? String(u.managerId) : "" });
     setEditando(u);
     setMensaje(null);
@@ -106,7 +101,6 @@ export default function GestionUsuarios() {
           <h2>Gestión de usuarios</h2>
           <button className="btn btn-primario" onClick={abrirNuevo}>+ Nuevo usuario</button>
         </div>
-        <input className="buscador" placeholder="Buscar por nombre, email, empresa o centro…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
         {mensaje && <p className={mensaje.tipo} role="status">{mensaje.texto}</p>}
         {credenciales && (
           <div className="credenciales">
@@ -119,11 +113,20 @@ export default function GestionUsuarios() {
       </div>
 
       {editando && (
-        <form className="tarjeta" onSubmit={guardar}>
-          <h3>{editando === "nuevo" ? "Nuevo usuario" : `Editar: ${editando.nombre} ${editando.apellidos}`}</h3>
-          <p className="nota">El email puede ser de cualquier dominio (Gmail, Outlook, corporativo…). No necesita cuenta de Microsoft.</p>
+        <Modal titulo={editando === "nuevo" ? "Nuevo usuario" : `Editar: ${editando.nombre} ${editando.apellidos}`} onCerrar={() => setEditando(null)} ancho>
+        <form className="form-modal" onSubmit={guardar}>
+          <p className="nota">
+            {editandoUsuario?.dni
+              ? <>Entra con su DNI/NIE <strong>{editandoUsuario.dni}</strong>. El email es para avisos.</>
+              : "Sin DNI/NIE: entra con su email. El email puede ser de cualquier dominio (Gmail, Outlook, corporativo…)."}
+          </p>
           <div className="rejilla">
-            <label>Email<input type="email" value={form.email} onChange={set("email")} required /></label>
+            <label>Email (avisos){!editandoUsuario?.dni && " y acceso"}<input type="email" value={form.email} onChange={set("email")} required /></label>
+            <label>
+              Correo profesional
+              <input type="email" value={form.emailCorporativo} onChange={set("emailCorporativo")} placeholder="nombre@arquisocial.es" />
+              <small className="nota">Si en a3 tiene un correo del grupo, se rellena solo.</small>
+            </label>
             <label>Nombre<input value={form.nombre} onChange={set("nombre")} required /></label>
             <label>Apellidos<input value={form.apellidos} onChange={set("apellidos")} required /></label>
             <label>
@@ -152,10 +155,12 @@ export default function GestionUsuarios() {
                 </label>
                 <label>
                   Manager (solo si dirige un departamento)
-                  <select value={form.managerId} onChange={set("managerId")}>
-                    <option value="">(Ninguno · CEO)</option>
-                    {candidatosManager.map((u) => <option key={u.id} value={u.id}>{u.nombre} {u.apellidos}</option>)}
-                  </select>
+                  <SelectorPersona
+                    personas={candidatosManager.map((u) => ({ id: u.id, nombre: `${u.nombre} ${u.apellidos}`, detalle: u.departamento ?? u.centro }))}
+                    valor={form.managerId}
+                    onCambio={(v) => setForm({ ...form, managerId: v })}
+                    vacio="Ninguno · CEO"
+                  />
                   <small className="nota">Le aprueba esta persona cuando es manager de un departamento o no tiene departamento. Si no, le aprueba el manager de su departamento.</small>
                 </label>
                 <label>
@@ -198,46 +203,20 @@ export default function GestionUsuarios() {
           {editando === "nuevo" && (
             <p className="nota">Contraseña temporal generada: <code>{pwTemporal}</code> <button type="button" className="btn-link" onClick={() => setPwTemporal(generarPasswordTemporal())}>Generar otra</button></p>
           )}
-          <div className="acciones-form">
-            <button className="btn btn-primario">Guardar</button>
+          {mensaje?.tipo === "error" && <p className="error" role="alert">{mensaje.texto}</p>}
+          <div className="modal-acciones">
             <button type="button" className="btn btn-secundario" onClick={() => setEditando(null)}>Cancelar</button>
+            <button className="btn btn-primario">Guardar</button>
           </div>
         </form>
+        </Modal>
       )}
 
-      <div className="tarjeta tabla-contenedor">
-        {usuarios === null ? (
-          <div className="centrado-bloque"><div className="spinner" /></div>
-        ) : (
-          <table className="tabla">
-            <thead>
-              <tr><th>Nombre</th><th>Email</th><th>Perfil</th><th>Aprobador</th><th>Rol</th><th>Estado</th><th></th></tr>
-            </thead>
-            <tbody>
-              {filtrados.map((u) => (
-                <tr key={u.id} className={u.activo ? "" : "inactivo"}>
-                  <td>{u.apellidos}, {u.nombre}</td>
-                  <td>{u.email}</td>
-                  <td>
-                    {u.tipoPerfil ? ETIQUETA_PERFIL[u.tipoPerfil] : <span className="chip chip-pausa_inicio">Sin perfil</span>}
-                    <div className="nota">{u.empresa}{u.tipoPerfil === "ESTRUCTURA" ? (u.departamento ? ` · ${u.departamento}` : " · sin departamento") : u.centro ? ` · ${u.codigoServicio ? `${u.codigoServicio} · ` : ""}${u.centro}` : ""}</div>
-                  </td>
-                  <td>{u.aprobador ?? <span className="nota">—</span>}{u.suplente && <div className="nota">Hoy: {u.suplente} (suplente)</div>}</td>
-                  <td>{ETIQUETA_ROL[u.rol] ?? u.rol}</td>
-                  <td>
-                    {!u.activo ? <span className="chip">Inactivo</span> : u.bloqueado ? <span className="chip chip-salida">Bloqueado</span> : u.debeCambiarPassword ? <span className="chip chip-pausa_inicio">Pendiente de activar</span> : <span className="chip chip-entrada">Activo</span>}
-                  </td>
-                  <td className="acciones-fila">
-                    <button className="btn-link" onClick={() => abrirEditar(u)}>Editar</button>
-                    <button className="btn-link" onClick={() => resetear(u)}>Resetear contraseña</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
+      {usuarios === null ? (
+        <div className="tarjeta"><div className="centrado-bloque"><div className="spinner" aria-label="Cargando" /></div></div>
+      ) : (
+        <ListadoUsuarios usuarios={usuarios} onEditar={abrirEditar} onResetear={resetear} />
+      )}
     </section>
   );
 }

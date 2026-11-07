@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, Suplencia, hoyLocal } from "../api";
 import Modal from "../components/Modal";
+import SelectorPersona from "../components/SelectorPersona";
 
 type Mensaje = { tipo: "exito" | "error"; texto: string } | null;
 const fechaCorta = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}`;
@@ -121,17 +122,11 @@ function NuevaSuplencia({ directorio, onCerrar, onGuardado }: { directorio: { id
       <form onSubmit={guardar} className="form-modal">
         <label>
           Titular (aprobador ausente)
-          <select value={f.titularId} onChange={(e) => setF({ ...f, titularId: e.target.value })} required>
-            <option value="">Selecciona…</option>
-            {directorio.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-          </select>
+          <SelectorPersona personas={directorio} valor={f.titularId} onCambio={(v) => setF({ ...f, titularId: v })} requerido />
         </label>
         <label>
           Suplente
-          <select value={f.suplenteId} onChange={(e) => setF({ ...f, suplenteId: e.target.value })} required>
-            <option value="">Selecciona…</option>
-            {directorio.filter((x) => String(x.id) !== f.titularId).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-          </select>
+          <SelectorPersona personas={directorio.filter((x) => String(x.id) !== f.titularId)} valor={f.suplenteId} onCambio={(v) => setF({ ...f, suplenteId: v })} requerido />
         </label>
         <div className="fila">
           <label>Desde<input type="date" value={f.desde} min={hoy} onChange={(e) => setF({ ...f, desde: e.target.value })} required /></label>
