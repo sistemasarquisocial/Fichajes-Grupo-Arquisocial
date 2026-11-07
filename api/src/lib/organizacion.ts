@@ -36,7 +36,26 @@ export interface Org {
 
 const TZ = () => process.env.TZ_APP || "Europe/Madrid";
 
-export async function cargarOrg(): Promise<Org> {
+/* La organización (≈10.000 personas) se lee una vez y se reutiliza 60 s en la instancia: ahorra consultas en cada
+   página. Cualquier petición que modifica datos (POST/PUT/DELETE) la invalida (ver conSesion en http.ts). */
+const TTL_ORG_MS = 60_000;
+let cacheOrg: { t: number; p: Promise<Org> } | null = null;
+
+export function invalidarOrg() {
+  cacheOrg = null;
+}
+
+export function cargarOrg(): Promise<Org> {
+  if (cacheOrg && Date.now() - cacheOrg.t < TTL_ORG_MS) return cacheOrg.p;
+  const p = leerOrg();
+  cacheOrg = { t: Date.now(), p };
+  p.catch(() => {
+    if (cacheOrg?.p === p) cacheOrg = null;
+  });
+  return p;
+}
+
+async function leerOrg(): Promise<Org> {
   const pool = await getPool();
   const hoy = fechaLocal(new Date(), TZ());
   const [u, d, c, s] = await Promise.all([
