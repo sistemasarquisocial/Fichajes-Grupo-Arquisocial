@@ -27,6 +27,20 @@ export interface Estadisticas {
 
 type Log = (m: string) => void;
 
+/* Diagnóstico de la ficha laboral: qué devuelve a3 en puesto y contrato (solo recuentos y nombres de campos, sin valores).
+   Se guarda en fich.Auditoria (A3_DIAG_FICHA) al final de cada sincronización que lee fichas. */
+interface DiagRuta { conDatos: number; vacio: number; noEncontrado: number; sinPermiso: number; campos: string[] }
+const diagNuevo = (): DiagRuta => ({ conDatos: 0, vacio: 0, noEncontrado: 0, sinPermiso: 0, campos: [] });
+let diag = { puesto: diagNuevo(), contrato: diagNuevo() };
+function anotarDiag(d: DiagRuta, r: any) {
+  if (r === null) { d.noEncontrado++; return; }
+  const o = Array.isArray(r) ? r[0] : r;
+  const conValor = o && typeof o === "object" ? Object.keys(o).filter((k) => o[k] !== null && o[k] !== "" && !String(o[k]).startsWith("0001-01-01")) : [];
+  if (conValor.length) d.conDatos++; else d.vacio++;
+  if (!d.campos.length && o && typeof o === "object")
+    d.campos = [...(Array.isArray(r) ? [`[lista de ${r.length}]`] : []), ...Object.keys(o).map((k) => (conValor.includes(k) ? k : `${k}(vacío)`))];
+}
+
 const hoyMadrid = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid" }).format(new Date());
 const restarDias = (f: string, d: number) => new Date(Date.parse(f + "T00:00:00Z") - d * 86400000).toISOString().slice(0, 10);
 
@@ -48,6 +62,7 @@ export function empresasLimitadas(v = process.env.A3_EMPRESAS): Set<number> | nu
 export async function sincronizar(completaPedida: boolean, log: Log): Promise<Estadisticas> {
   const est: Estadisticas = { llamadas: 0, empresas: 0, centros: 0, empleadosLeidos: 0, usuariosCreados: 0, usuariosActualizados: 0, usuariosDesactivados: 0, pendientes: 0, errores: [] };
   const hoy = hoyMadrid();
+  diag = { puesto: diagNuevo(), contrato: diagNuevo() };
   const con = await leerConexion();
   const completa = completaPedida || !con.marcaEmpleados;
   const alcance = alcanceConfigurado();
@@ -91,6 +106,12 @@ export async function sincronizar(completaPedida: boolean, log: Log): Promise<Es
   // 3. Conciliación
   await aplicarConciliacion(pool, hoy, leidas, est, log);
   await correoCorporativo(pool, log);
+  const leidasFichas = diag.puesto.conDatos + diag.puesto.vacio + diag.puesto.noEncontrado + diag.puesto.sinPermiso;
+  if (leidasFichas) {
+    const txt = `puesto: ${JSON.stringify(diag.puesto)} | contrato: ${JSON.stringify(diag.contrato)}`;
+    log(`Diagnóstico ficha: ${txt}`);
+    await auditar(pool, "A3_DIAG_FICHA", "A3Sincronizacion", null, txt.slice(0, 1990)).catch(() => {});
+  }
 
   if (!est.errores.length) {
     await pool
@@ -321,12 +342,15 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
   log(`Empresa ${cc}: ${filas.length} trabajadores leídos; ${nContacto} emails y ${nFicha} fichas (puesto y contrato) a consultar`);
   let sinPermiso = false;
   // Puesto y contrato: si el usuario de a3 no tiene permiso (403) se deja vacío y se avisa una vez en el log
-  const opcional = async (r: string) => {
+  const opcional = async (r: string, d: DiagRuta) => {
     try {
-      return await cli.get<any>(r);
+      const x = await cli.get<any>(r);
+      anotarDiag(d, x);
+      return x;
     } catch (e) {
       if (e instanceof ErrorA3 && e.status === 403) {
         sinPermiso = true;
+        d.sinPermiso++;
         return null;
       }
       throw e;
@@ -337,8 +361,8 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
     const [pr, pe, pu, co] = await Promise.all([
       contacto ? cli.get<any>(`${emp}/contactdata/professional`) : undefined,
       contacto ? cli.get<any>(`${emp}/contactdata/personal`) : undefined,
-      ficha ? opcional(`${emp}/jobPositionInformation`) : undefined,
-      ficha ? opcional(`${emp}/contract-agreement`) : undefined,
+      ficha ? opcional(`${emp}/jobPositionInformation`, diag.puesto) : undefined,
+      ficha ? opcional(`${emp}/contract-agreement`, diag.contrato) : undefined,
     ]);
     if (contacto) {
       const a = Array.isArray(pr) ? pr[0] : pr;
@@ -349,6 +373,8 @@ async function leerEmpleados(cli: A3Cliente, pool: sql.ConnectionPool, cc: numbe
     if (ficha) {
       f.puesto = fichaPuesto(pu);
       f.contrato = fichaContrato(co);
+      // Si a3 no tiene ficha de puesto, el puesto se toma del contrato (campo «puesto de trabajo» del contrato)
+      if (!f.puesto.puesto && f.contrato.puestoContrato) f.puesto.puesto = f.contrato.puestoContrato;
     }
   });
   if (sinPermiso) log(`Empresa ${cc}: el usuario de a3 no tiene permiso para leer puesto o contrato (403); se dejan vacíos`);

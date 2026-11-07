@@ -161,6 +161,8 @@ export interface FichaContrato {
   contratoDesde: string | null;
   contratoHasta: string | null;
   tipoCotizacion: string | null;
+  /** Puesto de trabajo tal como figura en el contrato (texto). */
+  puestoContrato: string | null;
 }
 
 /** /employees/{ec}/contract-agreement → contrato vigente. No se guarda el salario (annualGross*). */
@@ -172,5 +174,6 @@ export function fichaContrato(x: any): FichaContrato {
     contratoDesde: fechaA3(c?.labourPeriodStartDate),
     contratoHasta: fechaA3(c?.labourPeriodEndDate),
     tipoCotizacion: txt(c?.contributionType, 100),
+    puestoContrato: txt(c?.jobPosition, 150),
   };
 }
