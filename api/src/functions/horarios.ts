@@ -1,10 +1,10 @@
 import { app } from "@azure/functions";
 import { cargarAusencias } from "../lib/ausencias";
 import { getPool, sql } from "../lib/db";
-import { ipCliente, ROLES_VEN_TODO, UsuarioSesion } from "../lib/auth";
+import { ipCliente, UsuarioSesion } from "../lib/auth";
 import { json, error, leerJson, conSesion } from "../lib/http";
 import { auditar } from "../lib/auditoria";
-import { cargarOrg, idsVisibles, puedeVerEmpleado, Org, representados, centrosGestionados, centrosZona } from "../lib/organizacion";
+import { cargarOrg, idsVisibles, puedeVerEmpleado, Org, representados, centrosGestionados, centrosZona, veTodoOrg, centrosRrhhDe } from "../lib/organizacion";
 import { fechaLocal } from "../lib/jornada";
 import { fichajesEfectivos } from "../lib/correcciones";
 import {
@@ -19,25 +19,27 @@ import { cargarFestivosManuales } from "../lib/calendario";
    Se ven los del centro donde está ubicado, los que coordina o gestiona y los de su zona; RRHH y ADMIN, todos. */
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-const veTodo = (u: UsuarioSesion) => ROLES_VEN_TODO.includes(u.rol);
+// RRHH global y ADMIN ven y gestionan todo; el técnico de RRHH, además de su ámbito, los centros que tiene asignados
+const veTodo = (u: UsuarioSesion, org: Org) => veTodoOrg(org, u);
 const mesActual = () => fechaLocal(new Date(), TZ()).slice(0, 7);
 
 async function puedeGestionarHorario(u: UsuarioSesion, empleadoId: number) {
-  if (empleadoId === u.usuarioId && !veTodo(u)) return false;
+  if (empleadoId === u.usuarioId && !veTodo(u, await cargarOrg())) return false;
   return puedeVerEmpleado(u, empleadoId);
 }
 
 /** Centros cuyos turnos gestiona (null = todos). */
 function centrosTurnos(org: Org, u: UsuarioSesion): number[] | null {
-  if (veTodo(u)) return null;
+  if (veTodo(u, org)) return null;
   const r = new Set<number>([...representados(org, u.usuarioId)].flatMap((t) => org.centrosQueCoordina.get(t) ?? []));
+  for (const c of centrosRrhhDe(org, u)) r.add(c);
   for (const c of centrosGestionados(org, u.usuarioId)) r.add(c);
   return [...r];
 }
 
 /** Centros cuyos turnos puede ver (null = todos): donde está ubicado, los que gestiona y los de su zona. */
 function centrosTurnosVisibles(org: Org, u: UsuarioSesion): number[] | null {
-  if (veTodo(u)) return null;
+  if (veTodo(u, org)) return null;
   const r = new Set<number>([...(centrosTurnos(org, u) ?? []), ...centrosZona(org, u.usuarioId)]);
   const yo = org.usuarios.get(u.usuarioId);
   if (yo?.centroId) r.add(yo.centroId);
